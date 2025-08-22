@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Conexões</title>
+    <link rel="stylesheet" href="zdg.css" media="screen">
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #333; }
+        #clients-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+        .client-card { background-color: white; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 20px; width: 300px; text-align: center; }
+        .client-card h2 { margin-top: 0; color: #128C7E; }
+        .qrcode { min-height: 256px; margin: 15px auto; border: 1px solid #ddd; display: flex; align-items: center; justify-content: center; font-size: 2em; }
+        .qrcode img { width: 100%; height: 100%; }
+        .status { font-size: 1.1em; font-weight: bold; padding: 10px; border-radius: 5px; color: white; margin-bottom: 15px; }
+        .status.conectado { background-color: #25D366; }
+        .status.offline, .status.desconectado, .status.falha { background-color: #607D8B; }
+        .status.aguardando-qr-code, .status.inicializando { background-color: #FFC107; }
+        .btn-controls, .connect-controls, .qr-controls { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 5px; color: white; font-weight: bold; cursor: pointer; transition: background-color 0.2s; width: 100%;}
+        .btn-ligar { background-color: #25D366; }
+        .btn-desligar { background-color: #d32f2f; }
+        .btn-conectar { background-color: #0288D1; }
+        .btn-mostrar-qr { background-color: #FFA000; }
+        .btn-desconectar { background-color: #424242; }
+        .btn:disabled { background-color: #9E9E9E; cursor: not-allowed; }
+        .btn-group { display: flex; gap: 10px; }
+    </style>
+</head>
+<body>
+    <section class="u-align-center u-clearfix u-palette-3-light-2 u-section-2">
+        <div class="u-clearfix u-sheet u-valign-middle u-sheet-1">
+            <h1>Status das Conexões</h1>
+            <div id="clients-container"></div>
+        </div>
+    </section>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    
+    <script>
+    $(document).ready(function() {
+        const container = $('#clients-container');
+        const socket = io();
+
+        socket.on('client_list', function(clientIds) {
+            console.log('Lista de clientes recebida:', clientIds);
+            container.empty();
+
+            clientIds.forEach(id => {
+                const cardHtml = `
+                    <div class="client-card" id="card-${id}">
+                        <h2>${id}</h2>
+                        <p class="status offline" id="status-${id}">Carregando...</p>
+                        <div class="qrcode" id="qrcode-${id}"></div>
+                        <div class="connect-controls">
+                            <button class="btn btn-conectar" data-id="${id}">Conectar / Gerar QR</button>
+                        </div>
+                        <div class="qr-controls" style="display: none;">
+                            <button class="btn btn-mostrar-qr" data-id="${id}">Mostrar QR Code</button>
+                        </div>
+                        <div class="btn-controls" style="display: none;">
+                            <div class="btn-group">
+                               <button class="btn btn-ligar" data-id="${id}">Ligar Bot</button>
+                               <button class="btn btn-desligar" data-id="${id}">Desligar Bot</button>
+                            </div>
+                            <button class="btn btn-desconectar" data-id="${id}">Desconectar (Logout)</button>
+                        </div>
+                    </div>
+                `;
+                container.append(cardHtml);
+            });
+        });
+
+        socket.on('qr_code', function(data) {
+            const card = $('#card-' + data.id);
+            card.data('qrUrl', data.url);
+        });
+
+        socket.on('bot_state_update', function(data) {
+            const card = $('#card-' + data.id);
+            if (!card.length) return;
+
+            const statusEl = card.find('.status');
+            const controlsConectar = card.find('.connect-controls');
+            const controlsLigarDesligar = card.find('.btn-controls');
+            const controlsQr = card.find('.qr-controls');
+            const qrContainer = card.find('.qrcode');
+
+            let statusText = data.connectionStatus;
+            if (data.connectionStatus === 'Conectado') {
+                statusText += data.botState === 'active' ? ' (Ativo)' : ' (Inativo)';
+            }
+            statusEl.text(statusText).removeClass().addClass('status ' + data.connectionStatus.toLowerCase().replace(/ /g, '-'));
+
+            switch (data.connectionStatus) {
+                case 'Offline':
+                case 'Desconectado':
+                case 'Falha':
+                    controlsConectar.show();
+                    controlsLigarDesligar.hide();
+                    controlsQr.hide();
+                    qrContainer.empty().css('border', '1px solid #ddd');
+                    break;
+                case 'Inicializando':
+                    controlsConectar.hide();
+                    controlsLigarDesligar.hide();
+                    controlsQr.hide();
+                    qrContainer.empty();
+                    break;
+                case 'Aguardando QR Code':
+                    controlsConectar.hide();
+                    controlsLigarDesligar.hide();
+                    controlsQr.show();
+                    qrContainer.empty();
+                    break;
+                case 'Conectado':
+                    controlsConectar.hide();
+                    controlsLigarDesligar.show();
+                    controlsQr.hide();
+                    const btnLigar = card.find('.btn-ligar');
+                    const btnDesligar = card.find('.btn-desligar');
+                    btnLigar.prop('disabled', data.botState === 'active');
+                    btnDesligar.prop('disabled', data.botState === 'inactive');
+                    qrContainer.html('✅').css('border', 'none');
+                    break;
+            }
+        });
+
+        container.on('click', '.btn-conectar', function() {
+            const clientId = $(this).data('id');
+            socket.emit('initialize_client', { id: clientId });
+        });
+
+        container.on('click', '.btn-mostrar-qr', function() {
+            const clientId = $(this).data('id');
+            const card = $('#card-' + clientId);
+            const qrUrl = card.data('qrUrl');
+            const qrContainer = card.find('.qrcode');
+            if (qrUrl) {
+                qrContainer.empty().append($('<img>', { src: qrUrl }));
+                $(this).closest('.qr-controls').hide();
+            }
+        });
+
+        container.on('click', '.btn-ligar', function() {
+            const clientId = $(this).data('id');
+            socket.emit('toggle_bot_state', { id: clientId, state: 'active' });
+        });
+
+        container.on('click', '.btn-desligar', function() {
+            const clientId = $(this).data('id');
+            socket.emit('toggle_bot_state', { id: clientId, state: 'inactive' });
+        });
+
+        container.on('click', '.btn-desconectar', function() {
+            const clientId = $(this).data('id');
+            if (confirm(`Tem certeza que deseja desconectar o bot '${clientId}'?\nSerá necessário escanear o QR Code novamente.`)) {
+                socket.emit('disconnect_client', { id: clientId });
+            }
+        });
+    });
+    </script>
+</body>
+</html>
