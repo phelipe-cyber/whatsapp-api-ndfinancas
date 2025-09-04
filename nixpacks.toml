@@ -1,5 +1,14 @@
 # Configuração para o sistema de build Nixpacks do Railway
 
+# =========================================================
+# ===== CORREÇÃO APLICADA AQUI =====
+# =========================================================
+# Força o Railway a usar o Ubuntu 22.04 como base, que é mais estável
+# e compatível com a nossa lista de dependências do Puppeteer.
+[baseImage]
+baseImage = "ubuntu:22.04"
+# =========================================================
+
 [phases.setup]
 # Lista de pacotes do sistema (Debian/Ubuntu) que o Puppeteer/Chromium necessita
 aptPkgs = [
@@ -17,7 +26,7 @@ aptPkgs = [
     "libgbm1",
     "libgcc1",
     "libglib2.0-0",
-    "libgobject-2.0-0", # A biblioteca específica que estava em falta
+    "libgobject-2.0-0",
     "libgtk-3-0",
     "libnspr4",
     "libnss3",
@@ -45,3 +54,4 @@ aptPkgs = [
 [start]
 # O comando para iniciar a sua aplicação
 cmd = "node botzdg.js"
+
