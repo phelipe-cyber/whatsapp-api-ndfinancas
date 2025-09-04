@@ -1,16 +1,9 @@
-# Etapa 1: Usar uma imagem base oficial do Node.js
-FROM node:18-bullseye-slim
+FROM node:20-slim
 
-# =========================================================
-# ===== CORREÇÃO APLICADA AQUI =====
-# =========================================================
-# Instala todas as dependências necessárias para o Chromium/Puppeteer em ambientes Linux
-# Esta lista é mais completa e inclui a 'libgobject-2.0-so.0' (parte do pacote libgobject2.0-0)
-
+# Instala apenas as bibliotecas necessárias para o Chromium rodar headless
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     fonts-liberation \
-    libappindicator3-1 \
     libasound2t64 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -20,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libexpat1t64 \
     libfontconfig1 \
     libgbm1 \
-    libgcc1 \
     libglib2.0-0 \
     libgobject-2.0-0 \
     libgtk-3-0 \
@@ -28,7 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libnss3 \
     libpango-1.0-0t64 \
     libpangocairo-1.0-0t64 \
-    libstdc++6 \
     libx11-6 \
     libx11-xcb1 \
     libxcb1 \
@@ -42,26 +33,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     libxss1 \
     libxtst6 \
-    lsb-release \
     wget \
     xdg-utils \
+    # extras recomendados para headless
+    libu2f-udev \
+    libvulkan1 \
+    libdrm2 \
+    libxshmfence1 \
+    libxkbcommon0 \
  && rm -rf /var/lib/apt/lists/*
 
-
-# Define o diretório de trabalho dentro do contêiner
+# Define o diretório da aplicação
 WORKDIR /app
 
-# Copia o package.json e o package-lock.json
+# Copia pacotes primeiro (cache otimizado de dependências)
 COPY package*.json ./
 
-# Instala as dependências do projeto
+# Instala dependências do Node
 RUN npm install
 
-# Copia todos os outros ficheiros da sua aplicação
+# Instala o Chromium compatível com a versão do Puppeteer
+RUN npx puppeteer install --yes
+
+# Copia o restante do código
 COPY . .
 
-# Expõe a porta que a sua aplicação usa
-EXPOSE 8000
+# Expõe a porta usada pelo app (ajuste se necessário)
+EXPOSE 3000
 
-# O comando para iniciar a sua aplicação
-CMD [ "node", "botzdg.js" ]
+# Comando de inicialização
+CMD ["npm", "start"]

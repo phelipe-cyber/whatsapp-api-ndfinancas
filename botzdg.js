@@ -125,21 +125,24 @@ function broadcastStateUpdate(id) {
     }
 }
 
+const puppeteer = require("puppeteer");
+
 const createClient = (id) => {
     console.log(`[${id}] Preparando cliente...`);
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
-        puppeteer: { headless: true, 
+        puppeteer: {
+            headless: true,
+            executablePath: puppeteer.executablePath(), // garante que use o Chromium baixado
             args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process', // <- this one doesn't works in Windows
-                '--disable-gpu'
-            ] }
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-zygote",
+                "--single-process"
+            ]
+        }
     });
 
     client.botState = 'inactive';
