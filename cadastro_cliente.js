@@ -1,37 +1,74 @@
 // cadastro_handler.js
 const axios = require('axios');
 
+// Função de delay
+const delay = ms => new Promise(res => setTimeout(res, ms));
+
 // Esta função é chamada quando o bot sabe que o usuário está no meio de um cadastro.
-// Ela recebe um objeto com tudo o que precisa para não depender da ordem dos parâmetros.
 async function handleCadastroMessage({ msg, session, userSessions, registrationSteps }) {
     const userId = msg.from;
     const messageBody = msg.body.trim();
+    const totalSteps = registrationSteps.length;
 
     try {
+        // --- LÓGICA DE CONFIRMAÇÃO FINAL  ---
+        if (session.state === 'final_confirmation') {
+            if (messageBody.toLowerCase() === 'sim') {
+                await msg.reply('⏳ Confirmado! A salvar o seu cadastro, aguarde um momento...');
+                const result = await salvarCadastroCliente(userId, session.collectedData);
+                if (result.success) {
+                    await msg.reply('✅ Cadastro finalizado com sucesso! Analisaremos os seus dados e entraremos em contacto em breve.');
+                } else { 
+                    throw new Error("Falha ao salvar no banco de dados.");
+                }
+                userSessions.delete(userId);
+            } else if (messageBody.toLowerCase() === 'não') {
+                await msg.reply('Ok, vamos recomeçar o cadastro.');
+                // Reinicia o fluxo de cadastro
+                const firstStep = registrationSteps[0];
+                const questionText = firstStep.question.replace(/\d+\/\d+:/, `1/${totalSteps}:`);
+                await msg.reply(`Você pode digitar \`!cancelar\` a qualquer momento para parar.\n\n${questionText}`);
+                userSessions.set(userId, {
+                    lastMessageTimestamp: Date.now(),
+                    state: 'registering',
+                    step: 0,
+                    collectedData: {}
+                });
+            } else {
+                await msg.reply('Por favor, responda apenas com "sim" ou "não".');
+            }
+            return;
+        }
+
         // --- LÓGICA DE CONFIRMAÇÃO DE ENDEREÇO ---
         if (session.state === 'confirming_address') {
+            // ... (código sem alteração)
             if (messageBody.toLowerCase() === 'sim') {
                 session.state = 'registering';
                 session.step++;
                 const nextStep = registrationSteps[session.step];
-                await msg.reply(`Ótimo! *${nomeContato}*! \nAgora, por favor, informe o próximo dado.\n\n${nextStep.question}`);
+                const questionText = nextStep.question.replace(/\d+\/\d+:/, `${session.step + 1}/${totalSteps}:`);
+                await delay(1500);
+                await msg.reply(`Ótimo! Agora, por favor, informe o próximo dado.\n\n${questionText}`);
                 userSessions.set(userId, session);
             } else if (messageBody.toLowerCase() === 'não') {
                 session.state = 'registering';
                 const currentStep = registrationSteps[session.step];
-                await msg.reply(`Ok, *${nomeContato}*! \nvamos tentar novamente.\n\n${currentStep.question}`);
+                const questionText = currentStep.question.replace(/\d+\/\d+:/, `${session.step + 1}/${totalSteps}:`);
+                await delay(1500);
+                await msg.reply(`Ok, vamos tentar novamente.\n\n${questionText}`);
                 userSessions.set(userId, session);
             } else {
-                await msg.reply(`❌ Olá *${nomeContato}*! \nPor favor, responda apenas com "sim" ou "não".`);
+                await msg.reply('Por favor, responda apenas com "sim" ou "não".');
             }
-            return; // Finaliza aqui
+            return;
         }
 
         // --- LÓGICA PRINCIPAL DE CADASTRO ---
         if (session.state === 'registering') {
             const currentStep = registrationSteps[session.step];
 
-            // Lógica especial para o CEP
+            // ... (lógica do CEP sem alteração)
             if (currentStep.key === 'cep') {
                 const cep = messageBody.replace(/\D/g, '');
                 if (cep.length !== 8) {
@@ -47,59 +84,79 @@ async function handleCadastroMessage({ msg, session, userSessions, registrationS
                     
                     session.collectedData.cep = cep;
                     session.collectedData.partialAddress = address;
-                    session.state = 'confirming_address'; // Muda o estado para aguardar confirmação
+                    session.state = 'confirming_address';
                     userSessions.set(userId, session);
-
-                    await msg.reply(`✅ Olá *${nomeContato}*! \nEncontrei este endereço:\n\n${addressString}\n\nEstá correto? Responda com "sim" ou "não".`);
+                    
+                     // Delay antes da pergunta de confirmação
+                    await msg.reply(`Encontrei este endereço:\n\n${addressString}\n\nEstá correto? Responda com "sim" ou "não".`);
                 } catch (error) {
                     console.error(`[ERRO API CEP] Falha ao buscar CEP ${cep}:`, error);
-                    await msg.reply(`❌ Olá *${nomeContato}*! \nNão foi possível encontrar o endereço para este CEP. Por favor, verifique e tente novamente.`);
+                    await msg.reply('Não foi possível encontrar o endereço para este CEP. Por favor, verifique e tente novamente.');
                 }
-                return; // Finaliza aqui
+                return;
             }
-
-            // Validação do tipo de mensagem
+            
             const isMedia = msg.hasMedia;
             const isText = !msg.hasMedia;
             const isValidType = (currentStep.type === 'media' && isMedia) || (currentStep.type === 'text' && isText) || currentStep.type === 'any';
 
             if (!isValidType) {
-                return msg.reply(`❌ Olá *${nomeContato}*! \n Resposta inválida. Para esta etapa, envie: *${currentStep.type === 'media' ? 'um arquivo' : 'um texto'}*.`);
+                return msg.reply(`❌ Resposta inválida. Para esta etapa, envie: *${currentStep.type === 'media' ? 'um arquivo' : 'um texto'}*.`);
             }
             
-            // Coleta o dado
             if (isMedia) {
                 const attachmentData = await msg.downloadMedia();
                 if (!attachmentData) {
-                    return msg.reply(`❌ Olá *${nomeContato}*! \nOcorreu um erro ao baixar seu arquivo. Por favor, tente enviá-lo novamente.`);
+                    return msg.reply("❌ Ocorreu um erro ao baixar seu arquivo. Por favor, tente enviá-lo novamente.");
                 }
                 session.collectedData[currentStep.key] = attachmentData;
             } else {
                 session.collectedData[currentStep.key] = messageBody;
             }
 
-            // Avança para a próxima etapa
             session.step++;
 
             if (session.step < registrationSteps.length) {
                 const nextStep = registrationSteps[session.step];
-                await msg.reply(nextStep.question);
+                const questionText = nextStep.question.replace(/\d+\/\d+:/, `${session.step + 1}/${totalSteps}:`);
+                await delay(1500);
+                await msg.reply(questionText);
                 userSessions.set(userId, session);
             } else {
-                // Finaliza o cadastro
-                await msg.reply('⏳ Finalizando seu cadastro, aguarde um momento...');
-                const result = await salvarCadastroCliente(userId, session.collectedData);
-                if (result.success) {
-                    await msg.reply(`✅ Olá *${nomeContato}*! \nCadastro finalizado com sucesso! Analisaremos seus dados e entraremos em contato em breve.`);
-                } else { 
-                    throw new Error("Falha ao salvar no banco de dados.");
+                // ETAPA FINAL: Monta o resumo e pede a confirmação
+                await delay(1500);
+                
+                let summary = '📝 *Resumo do seu Cadastro*\n\nPor favor, confirme se os dados abaixo estão corretos:\n\n';
+                
+                for (let i = 0; i < registrationSteps.length; i++) {
+                    const step = registrationSteps[i];
+                    const data = session.collectedData[step.key];
+                    const questionTitle = step.question.substring(step.question.indexOf(':') + 1).trim();
+                    
+                    summary += `*${i + 1}. ${questionTitle}*\n`;
+                    
+                    if (step.type === 'media') {
+                        summary += `➡️ [Arquivo de Mídia Enviado]\n\n`;
+                    } else if (step.key === 'cep') {
+                        const addr = session.collectedData.partialAddress;
+                        summary += `➡️ ${addr.logradouro}, ${session.collectedData.numeroCasa}, ${session.collectedData.complemento} - ${addr.bairro}, ${addr.localidade} - ${addr.uf}\n\n`;
+                        // Pula as próximas duas etapas, pois já foram incluídas aqui
+                        i += 2; 
+                    } else {
+                        summary += `➡️ ${data}\n\n`;
+                    }
                 }
-                userSessions.delete(userId);
+                summary += 'Se tudo estiver correto, responda com *"sim"*. Se precisar corrigir algo, responda com *"não"* para recomeçar.';
+
+                session.state = 'final_confirmation';
+                userSessions.set(userId, session);
+
+                await msg.reply(summary);
             }
         }
     } catch (error) {
         console.error(`[ERRO NO CADASTRO] Usuário ${userId}:`, error);
-        await msg.reply(`❌ Olá *${nomeContato}*! \nOcorreu um erro inesperado durante o cadastro. A sessão foi encerrada. Por favor, comece novamente.`);
+        await msg.reply("Ocorreu um erro inesperado durante o cadastro. A sessão foi encerrada. Por favor, comece novamente.");
         userSessions.delete(userId);
     }
 }

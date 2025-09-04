@@ -1,0 +1,9 @@
+Ignora a pasta de módulos do Node, pois ela será instalada dentro do contêiner
+/node_modules
+
+Ignora os ficheiros de sessão do WhatsApp para não os incluir na imagem
+.wwebjs_auth/
+.wwebjs_cache/
+
+Ignora ficheiros de log e de depuração do npm
+npm-debug.log

@@ -25,3 +25,5 @@ npm install basic-ftp
 npm install tesseract.js
 npm install pdf-poppler
 npm install pdf-parse
+
+docker-compose down && docker-compose up --build -d

@@ -18,7 +18,8 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
 
     try {
         // ETAPA 1: Usuário envia a mídia primeiro
-        if (msg.hasMedia && messageBody.toLowerCase() == '!ping') {
+        // if (msg.hasMedia && messageBody.toLowerCase() == '!ping') {
+        if (msg.hasMedia && session) {
             console.log(`[COMPROVANTE] Mídia recebida de ${userId}. Armazenando...`);
             const attachmentData = await msg.downloadMedia();
             if (!attachmentData) throw new Error("Falha ao baixar a mídia.");
@@ -72,7 +73,7 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
                 }
 
                 const dadosComprovante = parseComprovanteText(textoExtraido);
-                let resposta = `*✅ Olá *${nomeContato}*! \nDados extraídos do comprovante:*\n\n👤 *Nome:* ${dadosComprovante.nome || 'Não encontrado'}\n💰 *Valor:* R$ ${dadosComprovante.valor || 'Não encontrado'}\n📅 *Data:* ${dadosComprovante.data || 'Não encontrada'}`;
+                let resposta = `*✅ Olá *${nomeContato}*! \nDados extraídos do comprovante:\n\n👤 *Nome:* ${dadosComprovante.nome || 'Não encontrado'}\n💰 *Valor:* R$ ${dadosComprovante.valor || 'Não encontrado'}\n📅 *Data:* ${dadosComprovante.data || 'Não encontrada'}`;
                 await msg.reply(resposta);
 
                 const uploadedFile = {

@@ -41,14 +41,14 @@ const registrationSteps = [
     // { key: 'comprovanteResidencia', question: '1/10: Por favor, envie seu *comprovante de residência* atualizado (água, luz, fatura de cartão, etc.).', type: 'media' },
     // { key: 'videoResidencia', question: '2/10: Ótimo. Agora, envie um *vídeo da sua residência* (interno e externo).', type: 'media' },
     // { key: 'contratoLocacao', question: '3/10: Se você mora de aluguel, envie o *contrato de locação*. Caso contrário, digite "não tenho".', type: 'any' },
-    // { key: 'documentoPessoal', question: '4/10: Envie uma foto do seu *documento* (RG, CPF ou CNH).', type: 'media' },
+    { key: 'documentoPessoal', question: '1/5: Envie uma foto do seu *documento* (RG, CPF ou CNH).', type: 'media' },
     // { key: 'selfieComDocumento', question: '5/10: Perfeito. Agora, envie uma *selfie segurando o mesmo documento* ao lado do seu rosto.', type: 'media' },
     // { key: 'comprovanteRenda', question: '6/10: Envie seu *comprovante de renda* atualizado (os 3 últimos holerites, se for CLT).', type: 'media' },
     // { key: 'dadosTrabalho', question: '7/10: Informe os *dados de onde você trabalha* (setor, horário, telefone, endereço e tempo de serviço).', type: 'text' },
-    { key: 'nomeCompleto', question: '1/4: Nome Completo.', type: 'text' },
-    { key: 'cep', question: '2/4: Para o endereço, por favor, digite seu *CEP* (apenas números).', type: 'text' },
-    { key: 'numeroCasa', question: '3/4: Qual o *número* da sua residência?', type: 'text' },
-    { key: 'complemento', question: '4/4: Para finalizar, digite o *complemento* (se houver). Caso não tenha, digite "Nenhum".', type: 'text' }
+    { key: 'nomeCompleto', question: '2/5: Nome Completo.', type: 'text' },
+    { key: 'cep', question: '3/5: Para o endereço, por favor, digite seu *CEP* (apenas números).', type: 'text' },
+    { key: 'numeroCasa', question: '4/5: Qual o *número* da sua residência?', type: 'text' },
+    { key: 'complemento', question: '5/5: Para finalizar, digite o *complemento* (se houver). Caso não tenha, digite "Nenhum".', type: 'text' }
 ];
 
 // =========================================================
@@ -129,7 +129,17 @@ const createClient = (id) => {
     console.log(`[${id}] Preparando cliente...`);
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
-        puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+        puppeteer: { headless: true, 
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process', // <- this one doesn't works in Windows
+                '--disable-gpu'
+            ] }
     });
 
     client.botState = 'inactive';
@@ -153,15 +163,19 @@ const createClient = (id) => {
 
     // ===== LÓGICA DE MENSAGENS ATUALIZADA =====
     client.on('message', async msg => {
+        const messageBody = msg.body.trim();
+        // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
+        console.log(`Conteúdo: "${messageBody}"`);
+
         const clientInstance = clients.get(id);
         if (clientInstance.botState !== 'active' || (await msg.getChat()).isGroup) return;
 
         const userId = msg.from;
         const nomeContato = msg._data.notifyName;
         const now = Date.now();
-        const messageBody = msg.body.trim();
-        console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
-        console.log(`Conteúdo: "${messageBody}"`);
+        // const messageBody = msg.body.trim();
+        // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
+        // console.log(`Conteúdo: "${messageBody}"`);
 
         // --- LÓGICA DE MENU (se não for parte do fluxo de comprovante) ---
         const session = userSessions.get(userId);
@@ -169,69 +183,100 @@ const createClient = (id) => {
         const isNewConversation = !session || (now - session.lastMessageTimestamp > SESSION_TIMEOUT_MS);
         console.log('2. O resultado de "isNewConversation" é:', isNewConversation);
 
-        if (messageBody.toLowerCase() === '!cancelar') {
-            if (session) {
-                userSessions.delete(userId);
-                await msg.reply('✅ Ação cancelada.');
-            } else {
-                await msg.reply('Não há uma ação em andamento para cancelar.');
-            }
+        // ===== CORREÇÃO: LÓGICA DE BLOQUEIO PARA EVITAR MENSAGENS DUPLAS =====
+        if (session && session.isProcessing) {
+            console.log(`[BLOQUEIO] Mensagem de ${userId} ignorada por processamento rápido.`);
             return;
         }
-
-        // --- LÓGICA 1: FLUXO DE CADASTRO (MAIOR PRIORIDADE) ---
-        if (session && (session.state === 'registering' || session.state === 'confirming_address')) {
-            // Passa o controle para o manipulador de cadastro
-            await handleCadastroMessage({ msg, session, userSessions, registrationSteps });
-            return; // Finaliza o processamento aqui
-        }
-
-        if (isNewConversation && messageBody.toLowerCase() == '!ping') {
-            console.log('3. LÓGICA: Entrou no bloco de NOVA CONVERSA.');
-            const textMenu = `Olá *${nomeContato}*! 👋\n\nBem-vindo ao nosso atendimento.\n\n*Responda com o número da opção desejada:*\n\n*1* - Saber mais sobre o empréstimo\n*2* - Enviar Comprovante\n*3* - Finalizar Conversa\n*4* - Solicitar Empréstimo`;
-            await client.sendMessage(userId, textMenu);
-            userSessions.set(userId, { lastMessageTimestamp: now, state: 'menu' });
-            console.log('4. Sessão criada/atualizada. Finalizando processamento para esta mensagem.');
-            return;
-        }
-
         if (session) {
-            console.log('5. LÓGICA: Entrou no bloco de CONVERSA ATIVA.');
-            session.lastMessageTimestamp = now;
+            session.isProcessing = true;
             userSessions.set(userId, session);
-            console.log('6. Timestamp atualizado com sucesso.');
-
         }
 
-        // --- LÓGICA 2: FLUXO DE COMPROVANTE ---
-        const comprovanteResult = await handleComprovanteMessage({ msg, session, userSessions, pendingMedia });
-        if (comprovanteResult.handled) {
-            return; // Se o manipulador de comprovante tratou a mensagem, finaliza aqui
+      try{
+    
+            if (messageBody.toLowerCase() === '!cancelar') {
+                if (session) {
+                    userSessions.delete(userId);
+                    await msg.reply('✅ Ação cancelada.');
+                } else {
+                    await msg.reply('Não há uma ação em andamento para cancelar.');
+                }
+                return;
+            }
+
+            // CORREÇÃO: Adicionado 'final_confirmation' à verificação
+            if (session && (session.state === 'registering' || session.state === 'confirming_address' || session.state === 'final_confirmation')) {
+                await handleCadastroMessage({ msg, session, userSessions, registrationSteps });
+                return;
+            }
+            
+            // --- LÓGICA 1: FLUXO DE CADASTRO (MAIOR PRIORIDADE) ---
+            if (session && (session.state === 'registering' || session.state === 'confirming_address')) {
+                // Passa o controle para o manipulador de cadastro
+                await handleCadastroMessage({ msg, session, userSessions, registrationSteps, nomeContato });
+                return; // Finaliza o processamento aqui
+            }
+
+            if (isNewConversation && messageBody.toLowerCase() == '!ping') {
+                console.log('3. LÓGICA: Entrou no bloco de NOVA CONVERSA.');
+                const textMenu = `Olá *${nomeContato}*! 👋\n\nBem-vindo ao nosso atendimento.\n\n*Responda com o número da opção desejada:*\n\n*1* - Saber mais sobre o empréstimo\n*2* - Enviar Comprovante\n*3* - Finalizar Conversa\n*4* - Solicitar Empréstimo`;
+                await client.sendMessage(userId, textMenu);
+                userSessions.set(userId, { lastMessageTimestamp: now, state: 'menu' });
+                console.log('4. Sessão criada/atualizada. Finalizando processamento para esta mensagem.');
+                return;
+            }
+           
+            if (session) {
+                console.log('5. LÓGICA: Entrou no bloco de CONVERSA ATIVA.');
+                session.lastMessageTimestamp = now;
+                userSessions.set(userId, session);
+                console.log('6. Timestamp atualizado com sucesso.');
+
+            }
+
+            // --- LÓGICA 2: FLUXO DE COMPROVANTE ---
+            const comprovanteResult = await handleComprovanteMessage({ msg, session, userSessions, pendingMedia });
+            if (comprovanteResult.handled) {
+                return; // Se o manipulador de comprovante tratou a mensagem, finaliza aqui
+            }
+
+            if (session && messageBody === '1') {
+                // const textMenu = `*EXPLICATIVO SOBRE O EMPRÉSTIMO*\n\n*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n⚠️ *LEIA COM ATENÇÃO!* ⚠️\nOlá *${nomeContato}*!\nTrabalhamos da seguinte forma:\nEmpréstimo - valor inicial R$500,00.\n*(SUJEITO A ANÁLISE).*\n*LEIA COM ATENÇÃO*\nOlá,\nEntão, trabalhamos da seguinte forma:\n*PARA VALORES SUPERIORES A 2MIL, NECESSÁRIO UMA GARANTIA NO DOBRO DO VALOR*\n• O juros é de 30%, caso você pegue 1000 no próximo mês você pagará 1300 ou o juros + quanto vc quiser abater da dívida...\n• Se vc pegar só o juros você continuará devendo 1000 e o juros permanecerá de 300.\n• Se você mandar algum valor a mais do seu juros mensal, abatemos no capital.\nSeu Juros mensal ficará conforme o valor do seu Capital.\n*O dia de atraso no pagamento custa R$ 50.*\nSe o seu dia é dia 13 e vc só paga dia 15, vc tem que pegar R$ 100 *a mais* da sua parcela.\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n*CLT (com registro na carteira de trabalho)*\n- Preciso dos seguintes dados:\n* Comprovante de residência atualizado em seu nome. *(ÁGUA, LUZ, TELEFONE OU FATURA DE CARTÃO DE CRÉDITO)*\n* Vídeo da Residência interno e externo!\n* Contrato de Locação de imóvel (caso more de aluguel);\n* Documento *(RG, CPF OU CNH)*;\n* Documento com foto em uma *SELF*.\n* Ter no mínimo *TRÊS* meses de registro em carteira e enviar o comprovante de renda atualizado *(OS TRÊS ÚLTIMOS HOLERITES)*.\n* Todos os dados de onde você trabalha (*setor, horário, telefone e endereço, tempo de serviço*).\n*OBS: LEMBRANDO QUE NÃO TRABALHAMOS COM PARCELAS, SOMENTE COM JUROS! ENTÃO FIQUEM ATENTOS A TODAS INFORMAÇÕES !!!!!!*\n*ATENÇÃO!*\n🚨 *Após a análise dos documentos, marcaremos a visita na sua residência e no seu serviço (a visita serve para você tirar suas dúvidas e assinar um termo de responsabilidade).* 🚨\n*Caso não pague ou não responda o escritório, o setor de cobrança será acionado automaticamente e você será obrigado a deixar algum objeto eletrônico como forma de garantia. Após efetuar o pagamento, devolveremos o objeto.*\n*Se não estiver de acordo, basta não dar continuidade.*`;
+                const textMenu = `*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n\n⚠️ *LEIA COM ATENÇÃO EXPLICATIVO!* ⚠️\n\n📌 *Empréstimo Pessoal - Somente para CLT (acima de 3 meses).* \n\n• Valor mínimo disponível: *R$ 500,00* (sujeito à análise).\n• Juros fixo mensal: *30%*.\n• Exemplo: Empréstimo de R$ 500,00 → pagamento no próximo mês: R$ 650,00.\n• Se pagar apenas os juros (R$ 150,00), a dívida de R$ 500,00 continua.\n• Multa por atraso: *R$ 50,00 por dia*.\n• Exemplo: 2 dias de atraso = R$ 100,00 a mais.\n\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n\n📄 *Requisitos para quem tem carteira assinada (CLT):*\n• Comprovante de residência atualizado (em seu nome).\n• Vídeo da residência (interno e externo).\n• Contrato de locação (se morar de aluguel).\n• Documento oficial com foto (RG, CPF ou CNH) + selfie com o documento.\n• Mínimo de 3 meses de registro em carteira.\n• Enviar os 3 últimos holerites (comprovantes de renda).\n• Informações do local de trabalho (setor, horário, telefone, localização fixa, endereço e tempo de serviço).\n\n⚠️ *IMPORTANTE:*\n• Não trabalhamos com parcelas, apenas com pagamento de juros mensais.\n• Após a análise dos documentos, será feita uma visita presencial na residência e serviço para esclarecer dúvidas e assinar o termo de responsabilidade.\n• Em caso de inadimplência, será exigido um objeto eletrônico como garantia, que será devolvido após o pagamento.\n• Se não concordar com os termos, basta não prosseguir com o processo.`; 
+
+                await client.sendMessage(userId, textMenu);
+                const foto = MessageMedia.fromFilePath('./images/selfdocumento.jpeg');
+                client.sendMessage(userId, foto)
+
+            } else if (session && messageBody === '2') {
+                await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
+            } else if (session && messageBody === '3' || messageBody.toLowerCase() === '!finalizar') {
+                userSessions.delete(userId);
+                await msg.reply(`✅ Olá *${nomeContato}*, sua conversa foi finalizada.`);
+            } else if (session && messageBody === '4') {
+                const firstStep = registrationSteps[0];
+                await msg.reply(`Ok, vamos iniciar seu cadastro. Você pode digitar \`!cancelar\` a qualquer momento para parar.\n\n${firstStep.question}`);
+                userSessions.set(userId, {
+                    lastMessageTimestamp: now,
+                    state: 'registering',
+                    step: 0,
+                    collectedData: {}
+                });
+            }
+        } finally {
+            // ===== CORREÇÃO: LIBERA O BLOQUEIO APÓS O PROCESSAMENTO =====
+            if (session) {
+                setTimeout(() => {
+                    const currentSession = userSessions.get(userId);
+                    if (currentSession) {
+                        currentSession.isProcessing = false;
+                        userSessions.set(userId, currentSession);
+                    }
+                }, 1000); // Cooldown de 1 segundo
+            }
+            // =============================================================
         }
-
-        if (session && messageBody === '1') {
-            const textMenu = `*EXPLICATIVO SOBRE O EMPRÉSTIMO*\n\n*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n⚠️ *LEIA COM ATENÇÃO!* ⚠️\nOlá *${nomeContato}*!\nTrabalhamos da seguinte forma:\nEmpréstimo - valor inicial R$500,00.\n*(SUJEITO A ANÁLISE).*\n*LEIA COM ATENÇÃO*\nOlá,\nEntão, trabalhamos da seguinte forma:\n*PARA VALORES SUPERIORES A 2MIL, NECESSÁRIO UMA GARANTIA NO DOBRO DO VALOR*\n• O juros é de 30%, caso você pegue 1000 no próximo mês você pagará 1300 ou o juros + quanto vc quiser abater da dívida...\n• Se vc pegar só o juros você continuará devendo 1000 e o juros permanecerá de 300.\n• Se você mandar algum valor a mais do seu juros mensal, abatemos no capital.\nSeu Juros mensal ficará conforme o valor do seu Capital.\n*O dia de atraso no pagamento custa R$ 50.*\nSe o seu dia é dia 13 e vc só paga dia 15, vc tem que pegar R$ 100 *a mais* da sua parcela.\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n*CLT (com registro na carteira de trabalho)*\n- Preciso dos seguintes dados:\n* Comprovante de residência atualizado em seu nome. *(ÁGUA, LUZ, TELEFONE OU FATURA DE CARTÃO DE CRÉDITO)*\n* Vídeo da Residência interno e externo!\n* Contrato de Locação de imóvel (caso more de aluguel);\n* Documento *(RG, CPF OU CNH)*;\n* Documento com foto em uma *SELF*.\n* Ter no mínimo *TRÊS* meses de registro em carteira e enviar o comprovante de renda atualizado *(OS TRÊS ÚLTIMOS HOLERITES)*.\n* Todos os dados de onde você trabalha (*setor, horário, telefone e endereço, tempo de serviço*).\n*OBS: LEMBRANDO QUE NÃO TRABALHAMOS COM PARCELAS, SOMENTE COM JUROS! ENTÃO FIQUEM ATENTOS A TODAS INFORMAÇÕES !!!!!!*\n*ATENÇÃO!*\n🚨 *Após a análise dos documentos, marcaremos a visita na sua residência e no seu serviço (a visita serve para você tirar suas dúvidas e assinar um termo de responsabilidade).* 🚨\n*Caso não pague ou não responda o escritório, o setor de cobrança será acionado automaticamente e você será obrigado a deixar algum objeto eletrônico como forma de garantia. Após efetuar o pagamento, devolveremos o objeto.*\n*Se não estiver de acordo, basta não dar continuidade.*`;
-
-            await client.sendMessage(userId, textMenu);
-            const foto = MessageMedia.fromFilePath('./images/selfdocumento.jpeg');
-            client.sendMessage(userId, foto)
-
-        } else if (session && messageBody === '2') {
-            await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
-        } else if (session && messageBody === '3' || messageBody.toLowerCase() === '!finalizar') {
-            userSessions.delete(userId);
-            await msg.reply(`✅ Olá *${nomeContato}*, sua conversa foi finalizada.`);
-        } else if (session && messageBody === '4') {
-            const firstStep = registrationSteps[0];
-            await msg.reply(`Ok, vamos iniciar seu cadastro. Você pode digitar \`!cancelar\` a qualquer momento para parar.\n\n${firstStep.question}`);
-            userSessions.set(userId, {
-                lastMessageTimestamp: now,
-                state: 'registering',
-                step: 0,
-                collectedData: {}
-            });
-        }
-
 
     });
 
