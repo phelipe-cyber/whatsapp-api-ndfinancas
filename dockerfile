@@ -1,10 +1,10 @@
-FROM node:20-slim
+# Imagem base leve com Node.js
+FROM node:18-slim
 
-# Instala apenas as bibliotecas necessárias para o Chromium rodar headless
+# Instalar dependências necessárias pro Chromium rodar no container
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    fonts-liberation \
-    libasound2t64 \
+    libglib2.0-0 \
+    libgobject-2.0-0 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
     libcairo2 \
@@ -13,8 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libexpat1t64 \
     libfontconfig1 \
     libgbm1 \
-    libglib2.0-0 \
-    libgobject-2.0-0 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
@@ -35,30 +33,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     wget \
     xdg-utils \
-    # extras recomendados para headless
-    libu2f-udev \
-    libvulkan1 \
-    libdrm2 \
-    libxshmfence1 \
-    libxkbcommon0 \
  && rm -rf /var/lib/apt/lists/*
 
-# Define o diretório da aplicação
+# Definir diretório da aplicação
 WORKDIR /app
 
-# Copia pacotes primeiro (cache otimizado de dependências)
+# Copiar arquivos de dependências
 COPY package*.json ./
 
-# Instala dependências do Node
+# Instalar puppeteer completo (vem com Chromium incluso)
+RUN npm install puppeteer
+
+# Instalar demais dependências do projeto
 RUN npm install
 
-# Instala o Chromium compatível com a versão do Puppeteer
-RUN npx puppeteer install --yes
-
-# Copia o restante do código
+# Copiar o código
 COPY . .
 
-# Expõe a porta usada pelo app (ajuste se necessário)
+# Expor a porta (ajusta se sua app usar outra)
 EXPOSE 3000
 
 # Comando de inicialização

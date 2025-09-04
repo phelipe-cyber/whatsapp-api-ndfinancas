@@ -132,18 +132,17 @@ const createClient = (id) => {
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
         puppeteer: {
-            headless: true,
-            executablePath: puppeteer.executablePath(), // garante que use o Chromium baixado
-            args: [
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--no-zygote",
-                "--single-process"
-            ]
+          headless: true,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--no-zygote",
+            "--single-process"
+          ]
         }
-    });
+      });
 
     client.botState = 'inactive';
     client.connectionStatus = 'Offline';
