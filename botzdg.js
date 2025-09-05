@@ -131,18 +131,12 @@ const createClient = (id) => {
     console.log(`[${id}] Preparando cliente...`);
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
-        puppeteer: {
-          headless: true,
-          args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--no-zygote",
-            "--single-process"
-          ]
-        }
-      });
+        puppeteer: { headless: true, 
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox'
+            ] }
+    });
 
     client.botState = 'inactive';
     client.connectionStatus = 'Offline';
@@ -165,6 +159,7 @@ const createClient = (id) => {
 
     // ===== LÓGICA DE MENSAGENS ATUALIZADA =====
     client.on('message', async msg => {
+
         const messageBody = msg.body.trim();
         // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
         console.log(`Conteúdo: "${messageBody}"`);
@@ -196,6 +191,32 @@ const createClient = (id) => {
         }
 
       try{
+
+                // const chat = await msg.getChat();
+                // // Ignora grupos
+                // if (chat.isGroup) return;
+            
+                // const contact = await msg.getContact();
+            
+                // // Se for contato salvo, não faz nada
+                // if (contact.name || contact.pushname) return;
+            
+                // // Contato não salvo
+                // const userId = msg.from;
+                // const nomeContato = contact.pushname || "Contato não salvo";
+                // const messageBody = msg.body.trim();
+                // const now = Date.now();
+            
+                // console.log(`📩 Nova mensagem de ${nomeContato} (${userId})`);
+                // console.log(`Conteúdo: "${messageBody}"`);
+            
+                // // Mensagem para contatos não salvos
+                // const textMenu = `*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n\n⚠️ *LEIA COM ATENÇÃO EXPLICATIVO!* ⚠️\n\n📌 *Empréstimo Pessoal - Somente para CLT (acima de 3 meses).* \n\n• Valor mínimo disponível: *R$ 500,00* (sujeito à análise).\n• Juros fixo mensal: *30%*.\n• Exemplo: Empréstimo de R$ 500,00 → pagamento no próximo mês: R$ 650,00.\n• Se pagar apenas os juros (R$ 150,00), a dívida de R$ 500,00 continua.\n• Multa por atraso: *R$ 50,00 por dia*.\n• Exemplo: 2 dias de atraso = R$ 100,00 a mais.\n\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n\n📄 *Requisitos para quem tem carteira assinada (CLT):*\n• Comprovante de residência atualizado (em seu nome).\n• Vídeo da residência (interno e externo).\n• Contrato de locação (se morar de aluguel).\n• Documento oficial com foto (RG, CPF ou CNH) + selfie com o documento.\n• Mínimo de 3 meses de registro em carteira.\n• Enviar os 3 últimos holerites (comprovantes de renda).\n• Informações do local de trabalho (setor, horário, telefone, localização fixa, endereço e tempo de serviço).\n\n⚠️ *IMPORTANTE:*\n• Não trabalhamos com parcelas, apenas com pagamento de juros mensais.\n• Após a análise dos documentos, será feita uma visita presencial na residência e serviço para esclarecer dúvidas e assinar o termo de responsabilidade.\n• Em caso de inadimplência, será exigido um objeto eletrônico como garantia, que será devolvido após o pagamento.\n• Se não concordar com os termos, basta não prosseguir com o processo.`;
+                // await client.sendMessage(userId, textMenu);
+            
+                // // Enviar imagem
+                // const foto = MessageMedia.fromFilePath('./images/selfdocumento.jpeg');
+                // await client.sendMessage(userId, foto);
     
             if (messageBody.toLowerCase() === '!cancelar') {
                 if (session) {
@@ -245,12 +266,12 @@ const createClient = (id) => {
 
             if (session && messageBody === '1') {
                 // const textMenu = `*EXPLICATIVO SOBRE O EMPRÉSTIMO*\n\n*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n⚠️ *LEIA COM ATENÇÃO!* ⚠️\nOlá *${nomeContato}*!\nTrabalhamos da seguinte forma:\nEmpréstimo - valor inicial R$500,00.\n*(SUJEITO A ANÁLISE).*\n*LEIA COM ATENÇÃO*\nOlá,\nEntão, trabalhamos da seguinte forma:\n*PARA VALORES SUPERIORES A 2MIL, NECESSÁRIO UMA GARANTIA NO DOBRO DO VALOR*\n• O juros é de 30%, caso você pegue 1000 no próximo mês você pagará 1300 ou o juros + quanto vc quiser abater da dívida...\n• Se vc pegar só o juros você continuará devendo 1000 e o juros permanecerá de 300.\n• Se você mandar algum valor a mais do seu juros mensal, abatemos no capital.\nSeu Juros mensal ficará conforme o valor do seu Capital.\n*O dia de atraso no pagamento custa R$ 50.*\nSe o seu dia é dia 13 e vc só paga dia 15, vc tem que pegar R$ 100 *a mais* da sua parcela.\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n*CLT (com registro na carteira de trabalho)*\n- Preciso dos seguintes dados:\n* Comprovante de residência atualizado em seu nome. *(ÁGUA, LUZ, TELEFONE OU FATURA DE CARTÃO DE CRÉDITO)*\n* Vídeo da Residência interno e externo!\n* Contrato de Locação de imóvel (caso more de aluguel);\n* Documento *(RG, CPF OU CNH)*;\n* Documento com foto em uma *SELF*.\n* Ter no mínimo *TRÊS* meses de registro em carteira e enviar o comprovante de renda atualizado *(OS TRÊS ÚLTIMOS HOLERITES)*.\n* Todos os dados de onde você trabalha (*setor, horário, telefone e endereço, tempo de serviço*).\n*OBS: LEMBRANDO QUE NÃO TRABALHAMOS COM PARCELAS, SOMENTE COM JUROS! ENTÃO FIQUEM ATENTOS A TODAS INFORMAÇÕES !!!!!!*\n*ATENÇÃO!*\n🚨 *Após a análise dos documentos, marcaremos a visita na sua residência e no seu serviço (a visita serve para você tirar suas dúvidas e assinar um termo de responsabilidade).* 🚨\n*Caso não pague ou não responda o escritório, o setor de cobrança será acionado automaticamente e você será obrigado a deixar algum objeto eletrônico como forma de garantia. Após efetuar o pagamento, devolveremos o objeto.*\n*Se não estiver de acordo, basta não dar continuidade.*`;
-                const textMenu = `*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n\n⚠️ *LEIA COM ATENÇÃO EXPLICATIVO!* ⚠️\n\n📌 *Empréstimo Pessoal - Somente para CLT (acima de 3 meses).* \n\n• Valor mínimo disponível: *R$ 500,00* (sujeito à análise).\n• Juros fixo mensal: *30%*.\n• Exemplo: Empréstimo de R$ 500,00 → pagamento no próximo mês: R$ 650,00.\n• Se pagar apenas os juros (R$ 150,00), a dívida de R$ 500,00 continua.\n• Multa por atraso: *R$ 50,00 por dia*.\n• Exemplo: 2 dias de atraso = R$ 100,00 a mais.\n\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n\n📄 *Requisitos para quem tem carteira assinada (CLT):*\n• Comprovante de residência atualizado (em seu nome).\n• Vídeo da residência (interno e externo).\n• Contrato de locação (se morar de aluguel).\n• Documento oficial com foto (RG, CPF ou CNH) + selfie com o documento.\n• Mínimo de 3 meses de registro em carteira.\n• Enviar os 3 últimos holerites (comprovantes de renda).\n• Informações do local de trabalho (setor, horário, telefone, localização fixa, endereço e tempo de serviço).\n\n⚠️ *IMPORTANTE:*\n• Não trabalhamos com parcelas, apenas com pagamento de juros mensais.\n• Após a análise dos documentos, será feita uma visita presencial na residência e serviço para esclarecer dúvidas e assinar o termo de responsabilidade.\n• Em caso de inadimplência, será exigido um objeto eletrônico como garantia, que será devolvido após o pagamento.\n• Se não concordar com os termos, basta não prosseguir com o processo.`; 
+              
+                const textMenu = `*VOCÊ JÁ PEGA DINHEIRO A JUROS COM ALGUÉM?💰*\n\n⚠️ *LEIA COM ATENÇÃO EXPLICATIVO!* ⚠️\n\n📌 *Empréstimo Pessoal - Somente para CLT (acima de 3 meses).* \n\n• Valor mínimo disponível: *R$ 500,00* (sujeito à análise).\n• Juros fixo mensal: *30%*.\n• Exemplo: Empréstimo de R$ 500,00 → pagamento no próximo mês: R$ 650,00.\n• Se pagar apenas os juros (R$ 150,00), a dívida de R$ 500,00 continua.\n• Multa por atraso: *R$ 50,00 por dia*.\n• Exemplo: 2 dias de atraso = R$ 100,00 a mais.\n\n*CASO SEU VENCIMENTO CAIA NO FINAL DE SEMANA OU FERIADO, DEVERÁ EFETUAR O PAGAMENTO NORMALMENTE.*\n\n📄 *Requisitos para quem tem carteira assinada (CLT):*\n• Comprovante de residência atualizado (em seu nome).\n• Vídeo da residência (interno e externo).\n• Contrato de locação (se morar de aluguel).\n• Documento oficial com foto (RG, CPF ou CNH) + selfie com o documento.\n• Mínimo de 3 meses de registro em carteira.\n• Enviar os 3 últimos holerites (comprovantes de renda).\n• Informações do local de trabalho (setor, horário, telefone, localização fixa, endereço e tempo de serviço).\n\n⚠️ *IMPORTANTE:*\n• Não trabalhamos com parcelas, apenas com pagamento de juros mensais.\n• Após a análise dos documentos, será feita uma visita presencial na residência e serviço para esclarecer dúvidas e assinar o termo de responsabilidade.\n• Em caso de inadimplência, será exigido um objeto eletrônico como garantia, que será devolvido após o pagamento.\n• Se não concordar com os termos, basta não prosseguir com o processo.`;
 
                 await client.sendMessage(userId, textMenu);
                 const foto = MessageMedia.fromFilePath('./images/selfdocumento.jpeg');
                 client.sendMessage(userId, foto)
-
             } else if (session && messageBody === '2') {
                 await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
             } else if (session && messageBody === '3' || messageBody.toLowerCase() === '!finalizar') {

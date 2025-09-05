@@ -2,7 +2,7 @@
   "name": "bot-ph",
   "version": "1.0.0",
   "description": "bot-ph: based on Whatsapp API",
-  "main": "app.js",
+  "main": "botzdg.js",
   "scripts": {
     "start": "node botzdg.js",
     "start:dev": "nodemon botzdg.js",
@@ -28,12 +28,12 @@
     "mime-types": "^2.1.32",
     "mysql2": "^2.3.3",
     "pdf-parse": "^1.1.1",
+    "puppeteer-core": "^21.11.0",
     "qrcode": "^1.4.4",
     "socket.io": "2.3.0",
     "tesseract.js": "^6.0.1",
     "util": "^0.12.4",
-    "whatsapp-web.js": "^1.26.0",
-    "puppeteer": "^21.11.0"
+    "whatsapp-web.js": "^1.33.2"
   },
   "devDependencies": {
     "nodemon": "^2.0.14"

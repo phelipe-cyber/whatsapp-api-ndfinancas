@@ -1,29 +1,18 @@
-version: '3.8'
-
 services:
-  app:
-    # Constrói a imagem a partir do Dockerfile na pasta atual
-    build:
-      context: .
-      dockerfile: Dockerfile
-    
+  whatsapp_bot:
+    build: .
     container_name: whatsapp_bot_ndfinancas
-    restart: unless-stopped
-    
-    # Mapeia a porta da sua máquina para a porta do contêiner
     ports:
-      - "8000:8000"
-      
-    # Monta o código-fonte da sua máquina no contêiner para refletir as alterações
-    # Isto permite que você edite o código sem ter de reconstruir a imagem
+      - "8000:8000"  # Porta do bot
     volumes:
-      # Monta a pasta atual na pasta de trabalho do contêiner
-      - ./:/usr/src/app
-      # Usa um volume anónimo para garantir que a pasta node_modules de DENTRO do contêiner não seja substituída
-      - /usr/src/app/node_modules
-      # Monta a sua pasta de sessão do WhatsApp para que não perca a conexão ao reiniciar
-      - ./.wwebjs_auth:/usr/src/app/.wwebjs_auth
-
-networks:
-  app-network:
-    driver: bridge
+      - ./wwebjs_auth:/app/.wwebjs_auth  # Persistência da sessão do WhatsApp
+      - ./images:/app/images             # Pastas de imagens
+    environment:
+      - NODE_ENV=production
+      - PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+      # Adicione suas variáveis de ambiente do .env aqui
+      - MYSQL_HOST=host_do_banco
+      - MYSQL_USER=usuario
+      - MYSQL_PASSWORD=senha
+      - MYSQL_DATABASE=database
+    restart: unless-stopped

@@ -27,3 +27,13 @@ npm install pdf-poppler
 npm install pdf-parse
 
 docker-compose down && docker-compose up --build -d
+
+docker start whatsapp_bot_ndfinancas
+
+docker stop whatsapp_bot_ndfinancas
+
+rm -rf node_modules package-lock.json .wwebjs_auth .wwebjs_cache && npm cache clean --force && chmod -R 777 .wwebjs_auth .wwebjs_cache
+
+ rm -rf node_modules package-lock.json .wwebjs_auth .wwebjs_cache && npm cache clean --force && chmod -R 777 .wwebjs_auth .wwebjs_cache && npm install
+
+ sudo chmod -R 777 .wwebjs_auth

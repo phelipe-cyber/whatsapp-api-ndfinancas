@@ -4,7 +4,7 @@ FROM node:18-slim
 # Diretório de trabalho
 WORKDIR /app
 
-# Instalar Chromium e dependências necessárias
+# Instalar dependências necessárias para Chromium e Puppeteer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 
 RUN npm update whatsapp-web.js
+
 # Instalar dependências do projeto
 RUN npm install
 
