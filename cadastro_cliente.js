@@ -14,10 +14,10 @@ async function handleCadastroMessage({ msg, session, userSessions, registrationS
         // --- LÓGICA DE CONFIRMAÇÃO FINAL  ---
         if (session.state === 'final_confirmation') {
             if (messageBody.toLowerCase() === 'sim') {
-                await msg.reply('⏳ Confirmado! A salvar o seu cadastro, aguarde um momento...');
+                await msg.reply('⏳ Confirmado! Salvando o seu cadastro, aguarde um momento...');
                 const result = await salvarCadastroCliente(userId, session.collectedData);
                 if (result.success) {
-                    await msg.reply('✅ Cadastro finalizado com sucesso! Analisaremos os seus dados e entraremos em contacto em breve.');
+                    await msg.reply('✅ Cadastro finalizado com sucesso! Analisaremos os seus dados e entraremos em contato em breve.');
                 } else { 
                     throw new Error("Falha ao salvar no banco de dados.");
                 }

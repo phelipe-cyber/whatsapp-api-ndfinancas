@@ -26,7 +26,8 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
 
             pendingMedia.set(userId, attachmentData);
             userSessions.set(userId, { lastMessageTimestamp: Date.now(), state: 'awaiting_proof_data' });
-            await msg.reply('✅ Comprovante recebido. Agora, por favor, envie os dados do cliente (Ex: Nome: Cliente Teste, Juros mensal: 150).');
+            // await msg.reply('✅ Comprovante recebido. Agora, por favor, envie os dados do cliente (Ex: CPF: 123.123.123-12, Juros mensal: 150).');
+            await msg.reply('✅ Comprovante recebido! Agora, envie os dados do cliente. É obrigatório o *CPF* e pelo menos um destes:\n\n- Juros Mensal:\n- Juros Diaria:\n- Abatimento:\n- Quitacao:\n- Parcela:\n\n- Ex: `CPF: 123.456.789-00,\n- ABATIMENTO: 250`.');
             return { handled: true }; // Indica que a mensagem foi tratada
         }
 
@@ -34,7 +35,7 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
         if (session && session.state === 'awaiting_proof_data' && messageBody.includes(':')) {
             const attachmentData = pendingMedia.get(userId);
             if (!attachmentData) {
-                userSessions.delete(userId);
+                // userSessions.delete(userId);
                 await msg.reply(`Olá *${nomeContato}*! \nOcorreu um erro, o comprovante não foi encontrado. Por favor, envie o arquivo novamente.`);
                 return { handled: true };
             }
@@ -44,19 +45,31 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
             let connection;
             try {
                 const dadosDoCliente = parseMessageData(messageBody);
-                const { NOME: nomeCliente, 'JUROS MENSAL': juros_mensal, 'JUROS DIARIA': juros_diaria } = dadosDoCliente;
+                const { CPF: cpf, 'JUROS MENSAL': juros_mensal, 'JUROS DIARIA': juros_diaria, 'ABATIMENTO': abatimento, 'QUITACAO': quitacao, 'PARCELA': parcela, 'OBS': obs } = dadosDoCliente;
 
-                if (!nomeCliente || !juros_mensal) {
-                    return msg.reply(`❌ Olá *${nomeContato}*! \nDados incompletos. Forneça ao menos NOME e JUROS MENSAL no formato "CHAVE: VALOR".`);
+                if (!cpf) {
+                    return msg.reply(`⚠️ Olá *${nomeContato}*! Parece que o CPF não foi informado. Para que eu possa continuar, preciso que você o envie junto com os outros dados.\n\nO formato deve ser este: \n\`CPF: 123.456.789-00\``);
+                }
+
+                if (
+                    
+                    juros_mensal == null &&
+                    juros_diaria == null &&
+                    abatimento == null &&
+                    quitacao == null &&
+                    quitacao == null &&
+                    parcela == null 
+                ) {
+                    return msg.reply(`❌ Olá *${nomeContato}*! \nÉ obrigatório fornecer ao menos um dos seguintes valores:\n\n- JUROS MENSAL:\n- JUROS DIARIA:\n- ABATIMENTO:\n- QUITACAO:\n- PARCELA:`);
                 }
 
                 connection = await pool.getConnection();
-                const resultado = await verificarClienteExiste(nomeCliente);
+                const resultado = await verificarClienteExiste(cpf);
                 if (!resultado.existe) {
-                    return msg.reply(`❌ Olá *${nomeContato}*! \nCliente *${nomeCliente}* não encontrado no sistema.`);
+                    return msg.reply(`❌ Olá *${nomeContato}*! \nCPF: *${cpf}* não encontrado no sistema.`);
                 }
 
-                await msg.reply(`🛠️ Processando comprovante...`);
+                await msg.reply(`🛠️ Processando comprovante...\nNome: *${resultado.nome_cliente}*`);
                 const fileBuffer = Buffer.from(attachmentData.data, 'base64');
                 let textoExtraido = '';
 
@@ -72,8 +85,9 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
                     return msg.reply(`❌ Olá *${nomeContato}*! \nNão consegui extrair texto do arquivo. Tente um com melhor qualidade.`);
                 }
 
+                // console.log(`TextoExtraido: "${textoExtraido}"`);
                 const dadosComprovante = parseComprovanteText(textoExtraido);
-                let resposta = `*✅ Olá *${nomeContato}*! \nDados extraídos do comprovante:\n\n👤 *Nome:* ${dadosComprovante.nome || 'Não encontrado'}\n💰 *Valor:* R$ ${dadosComprovante.valor || 'Não encontrado'}\n📅 *Data:* ${dadosComprovante.data || 'Não encontrada'}`;
+                let resposta = `✅ Olá *${nomeContato}*! \nDados extraídos do comprovante:\n\n👤 *Nome:* ${dadosComprovante.nome || 'Não encontrado'}\n💰 *Valor:* R$ ${dadosComprovante.valor || 'Não encontrado'}\n📅 *Data:* ${dadosComprovante.data || 'Não encontrada'}`;
                 await msg.reply(resposta);
 
                 const uploadedFile = {
@@ -82,12 +96,12 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
                     mimetype: attachmentData.mimetype
                 };
 
-                const result = await salvarComprovante(resultado.id_solicitacao, uploadedFile, dadosComprovante.data, juros_diaria, juros_mensal, dadosComprovante.valor);
+                const result = await salvarComprovante(resultado.id_solicitacao, uploadedFile, dadosComprovante.data, juros_diaria, juros_mensal, dadosComprovante.valor, dadosComprovante.nome, abatimento, quitacao, parcela, obs);
 
                 if (result.success) {
-                    await msg.reply(`✅ Olá *${nomeContato}*! \n Comprovante *${nomeCliente}* processado com sucesso!`);
+                    await msg.reply(`✅ Olá *${nomeContato}*! \n Comprovante processado com sucesso!`);
                     pendingMedia.delete(userId);
-                    userSessions.delete(userId);
+                    // userSessions.delete(userId);
                 } else {
                     throw new Error(result.error || 'Falha ao salvar o comprovante.');
                 }
@@ -102,7 +116,7 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
         } catch (error) {
         console.error(`[ERRO NO COMPROVANTE] Usuário ${userId}:`, error);
         await msg.reply("❌ Olá *${nomeContato}*! \nOcorreu um erro inesperado durante o processamento do comprovante. A sessão foi encerrada.");
-        userSessions.delete(userId);
+        // userSessions.delete(userId);
         pendingMedia.delete(userId);
         return { handled: true };
     }
@@ -113,38 +127,38 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
 
 // --- FUNÇÕES AUXILIARES (movidas para cá) ---
 
-function parseComprovanteText(text) {
-    const data = { valor: null, nome: null, data: null };
-    const valorPatterns = [/VALOR\s*:\s*([\d.,]+)/i, /R\$\s+([\d.,]+)/i, /Valor\s*[:\s\n]*R\$\s*([\d.,]+)/i, /Valor\s+R\$\s*([\d.,]+)/i, /Valor\s*da\s*Transferência\s*[:\s\n]*R\$\s*([\d.,]+)/i, /VALOR\s*[:\s\n]*R\$\s*([\d.,]+)/i, /(?:\n|^)\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:\n|$)/, /R\$\s*([\d.,]+)/];
-    const nomePatterns = [/\d{4}\s+\d{4}\s+\d{10}-\d\s*\n([A-ZÀ-Ú\s]+)/i, /\n([A-ZÀ-Ú\s]+)\nVALOR/i, /dados da conta debitada\s*[\n\s]*nome\s+([A-Za-zÀ-ú\s]+)/i, /Dados\s+de\s+quem\s+pagou\s*[\n\s]*Nome:\s*([A-Za-zÀ-ú\s]+)/i, /Quem\s*pagou\s*[\n\s]*Nome\s+([A-Za-zÀ-ú\s]+)/i, /(?:\n|^)\s*De\s*\n([\s\S]+?)\n\s*CPF:/i, /Origem\s*[\n\s]*Nome\s+([A-Za-zÀ-ú\s]+)/i, /De\s*[\n:]\s*([A-Za-zÀ-ú\s]+)/, /Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i, /Nome\s*do\s*Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i];
-    const dataPatterns = [/(\d{2}\/[A-Z]{3}\/\d{4})/i, /realizado em\s*(\d{2}\/\d{2}\/\d{4})/i, /(\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i, /(\d{1,2}\/[a-z]{3}\/\d{4})/i, /(\d{1,2}\s+[A-ZÇ-ú]+\s+\d{4})/i, /(\d{2}\/\d{2}\/\d{4})/, /Data\s*da\s*Transação\s*[:\n\s]*(\d{2}\/\d{2}\/\d{4})/i, /Realizada\s*em\s*(\d{2}\/\d{2}\/\d{4})/i];
+// function parseComprovanteText(text) {
+//     const data = { valor: null, nome: null, data: null };
+//     const valorPatterns = [/VALOR\s*:\s*([\d.,]+)/i, /R\$\s+([\d.,]+)/i, /Valor\s*[:\s\n]*R\$\s*([\d.,]+)/i, /Valor\s+R\$\s*([\d.,]+)/i, /Valor\s*da\s*Transferência\s*[:\s\n]*R\$\s*([\d.,]+)/i, /VALOR\s*[:\s\n]*R\$\s*([\d.,]+)/i, /(?:\n|^)\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:\n|$)/, /R\$\s*([\d.,]+)/];
+//     const nomePatterns = [/\d{4}\s+\d{4}\s+\d{10}-\d\s*\n([A-ZÀ-Ú\s]+)/i, /\n([A-ZÀ-Ú\s]+)\nVALOR/i, /dados da conta debitada\s*[\n\s]*nome\s+([A-Za-zÀ-ú\s]+)/i, /Dados\s+de\s+quem\s+pagou\s*[\n\s]*Nome:\s*([A-Za-zÀ-ú\s]+)/i, /Quem\s*pagou\s*[\n\s]*Nome\s+([A-Za-zÀ-ú\s]+)/i, /(?:\n|^)\s*De\s*\n([\s\S]+?)\n\s*CPF:/i, /Origem\s*[\n\s]*Nome\s+([A-Za-zÀ-ú\s]+)/i, /De\s*[\n:]\s*([A-Za-zÀ-ú\s]+)/, /Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i, /Nome\s*do\s*Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i];
+//     const dataPatterns = [/(\d{2}\/[A-Z]{3}\/\d{4})/i, /realizado em\s*(\d{2}\/\d{2}\/\d{4})/i, /(\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i, /(\d{1,2}\/[a-z]{3}\/\d{4})/i, /(\d{1,2}\s+[A-ZÇ-ú]+\s+\d{4})/i, /(\d{2}\/\d{2}\/\d{4})/, /Data\s*da\s*Transação\s*[:\n\s]*(\d{2}\/\d{2}\/\d{4})/i, /Realizada\s*em\s*(\d{2}\/\d{2}\/\d{4})/i];
 
-    function findMatch(patterns, text) {
-        for (const pattern of patterns) {
-            const match = text.match(pattern);
-            if (match && match[1]) return match[1].replace(/(\r\n|\n|\r)/gm, " ").trim();
-        }
-        return null;
-    }
+//     function findMatch(patterns, text) {
+//         for (const pattern of patterns) {
+//             const match = text.match(pattern);
+//             if (match && match[1]) return match[1].replace(/(\r\n|\n|\r)/gm, " ").trim();
+//         }
+//         return null;
+//     }
 
-    data.valor = findMatch(valorPatterns, text);
-    let nomeBruto = findMatch(nomePatterns, text);
-    if (nomeBruto) {
-        data.nome = nomeBruto.replace(/CPF$/i, '').replace(/Instituição NU PAGAMENTOS/i, '').trim();
-    }
-    data.data = normalizeDate(findMatch(dataPatterns, text));
-    return data;
-}
+//     data.valor = findMatch(valorPatterns, text);
+//     let nomeBruto = findMatch(nomePatterns, text);
+//     if (nomeBruto) {
+//         data.nome = nomeBruto.replace(/CPF$/i, '').replace(/Instituição NU PAGAMENTOS/i, '').trim();
+//     }
+//     data.data = normalizeDate(findMatch(dataPatterns, text));
+//     return data;
+// }
 
 async function verificarClienteExiste(clientName) {
     let connection;
     try {
         connection = await pool.getConnection();
         const sql = `
-            SELECT c.socio AS nome_cliente, s.id AS id_solicitacao
-            FROM clientes c
-            LEFT JOIN solicitacao s ON s.id_cliente = c.id
-            WHERE c.socio = ? LIMIT 1`;
+            SELECT c.nome AS nome_cliente, s.id AS id_solicitacao FROM clientes c
+                LEFT JOIN solicitacao s ON s.id_cliente = c.id
+            WHERE REGEXP_REPLACE(c.cpf, '[^0-9]', '') = ? `;
+
         const [rows] = await connection.execute(sql, [clientName]);
         if (rows.length > 0) {
             return { existe: true, id_solicitacao: rows[0].id_solicitacao, nome_cliente: rows[0].nome_cliente };
@@ -159,39 +173,194 @@ async function verificarClienteExiste(clientName) {
     }
 }
 
-function normalizeDate(dateStr) {
-    if (!dateStr) return null;
-    const monthMap = { 'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 'março': '03', 'mar': '03', 'abril': '04', 'abr': '04', 'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06', 'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08', 'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10', 'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12' };
-    const lowerDateStr = dateStr.toLowerCase();
-    let match = lowerDateStr.match(/(\d{1,2})\s+(?:de\s+)?([a-zç]+)\s+(?:de\s+)?(\d{4})/);
-    if (match) {
-        const month = monthMap[match[2]];
-        if (month) return `${match[3]}-${month}-${match[1].padStart(2, '0')}`;
-    }
-    match = lowerDateStr.match(/(\d{1,2})\/([a-z]{3})\/(\d{4})/);
-    if (match) {
-        const month = monthMap[match[2]];
-        if (month) return `${match[3]}-${month}-${match[1].padStart(2, '0')}`;
-    }
-    match = lowerDateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-    if (match) return `${match[3]}-${match[2]}-${match[1]}`;
-    return dateStr;
-}
+// function normalizeDate(dateStr) {
+//     if (!dateStr) return null;
+//     const monthMap = { 'janeiro': '01', 'jan': '01', 'fevereiro': '02', 'fev': '02', 'março': '03', 'mar': '03', 'abril': '04', 'abr': '04', 'maio': '05', 'mai': '05', 'junho': '06', 'jun': '06', 'julho': '07', 'jul': '07', 'agosto': '08', 'ago': '08', 'setembro': '09', 'set': '09', 'outubro': '10', 'out': '10', 'novembro': '11', 'nov': '11', 'dezembro': '12', 'dez': '12' };
+//     const lowerDateStr = dateStr.toLowerCase();
+//     let match = lowerDateStr.match(/(\d{1,2})\s+(?:de\s+)?([a-zç]+)\s+(?:de\s+)?(\d{4})/);
+//     if (match) {
+//         const month = monthMap[match[2]];
+//         if (month) return `${match[3]}-${month}-${match[1].padStart(2, '0')}`;
+//     }
+//     match = lowerDateStr.match(/(\d{1,2})\/([a-z]{3})\/(\d{4})/);
+//     if (match) {
+//         const month = monthMap[match[2]];
+//         if (month) return `${match[3]}-${month}-${match[1].padStart(2, '0')}`;
+//     }
+//     match = lowerDateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+//     if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+//     return dateStr;
+// }
 
 function parseMessageData(textBody) {
+     // NOVA FUNÇÃO AUXILIAR: Específica para limpar CPF
+     function limparCPF(cpfStr) {
+        if (!cpfStr || typeof cpfStr !== 'string') return null;
+        // Remove tudo que não for um dígito (pontos, hífens, espaços, etc.)
+        return cpfStr.replace(/[^\d]/g, '');
+    }
     const data = {};
+    // Converte todo o texto para maiúsculas no início.
     const lines = textBody.toUpperCase().split('\n');
+
     for (const line of lines) {
         const parts = line.split(':');
-        if (parts.length >= 1) {
+        if (parts.length > 1) { // Garante que há uma chave e um valor
             const key = parts[0].trim();
-            let valueStr = parts.slice(1).join(':').trim();
-            valueStr = valueStr.toUpperCase();
-            const value = !isNaN(valueStr) && valueStr.trim() !== '' ? Number(valueStr) : valueStr;
-            data[key] = value;
+            // Pega o resto da linha como valor, caso o valor tenha ':'
+            const valueStr = parts.slice(1).join(':').trim();
+
+            if (key) { // Evita criar chaves vazias
+                // ESTA É A LÓGICA CRÍTICA:
+                // Se valueStr for um número, converte para Number.
+                // Senão, mantém como texto (que já está em maiúsculas).
+                // const finalValue = !isNaN(valueStr) && valueStr.trim() !== '' ? Number(valueStr) : valueStr;
+                // data[key] = finalValue;
+                if (key === 'CPF') {
+                    // Se a chave é 'CPF', usa a função de limpeza de CPF
+                    data[key] = limparCPF(valueStr);
+                } else {
+                    // Para todas as outras chaves, usa a lógica anterior
+                    const finalValue = !isNaN(valueStr) && valueStr.trim() !== '' ? Number(valueStr) : valueStr;
+                    data[key] = finalValue;
+                }
+            }
         }
     }
     return data;
 }
+
+
+/**
+ * Analisa o texto extraído de um comprovante de transferência para extrair valor, nome do pagador e data.
+ * @param {string} text O texto bruto extraído do comprovante via OCR.
+ * @returns {{valor: number|null, nome: string|null, data: string|null}} Um objeto com os dados extraídos e normalizados.
+ */
+function parseComprovanteText(text) {
+
+    // --- 1. FUNÇÕES AUXILIARES DE NORMALIZAÇÃO ---
+
+    function findMatch(patterns, textToSearch) {
+        for (const pattern of patterns) {
+            const match = textToSearch.match(pattern);
+            if (match && match[1]) {
+                return match[1].replace(/(\r\n|\n|\r)/gm, " ").trim();
+            }
+        }
+        return null;
+    }
+
+    function normalizeValor(valorStr) {
+        if (!valorStr) return null;
+        const cleanedStr = valorStr
+            .replace(/\./g, '')
+            .replace(',', '.');
+        return parseFloat(cleanedStr);
+    }
+
+    function normalizeDate(dateStr) {
+        if (!dateStr) return null;
+
+        const months = {
+            'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04', 'maio': '05', 'junho': '06',
+            'julho': '07', 'agosto': '08', 'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12',
+            'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
+            'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
+        };
+
+        // Tenta corresponder a "DD de [Mês] de AAAA"
+        let match = dateStr.toLowerCase().match(/(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
+        if (match) {
+            const day = match[1].padStart(2, '0');
+            const month = months[match[2]];
+            const year = match[3];
+            if (day && month && year) return `${year}-${month}-${day}`;
+        }
+        
+        // NOVO: Tenta corresponder a "DD MMM AAAA" (ex: 15 Set 2025)
+        match = dateStr.toLowerCase().match(/(\d{1,2})\s+([a-z]{3})\s+(\d{4})/);
+        if (match) {
+            const day = match[1].padStart(2, '0');
+            const month = months[match[2]];
+            const year = match[3];
+            if (day && month && year) return `${year}-${month}-${day}`;
+        }
+
+        // Tenta corresponder a "DD/MMM/AAAA" (ex: 11/SET/2025)
+        match = dateStr.toLowerCase().match(/(\d{1,2})\/([a-z]{3})\/(\d{4})/);
+        if (match) {
+            const day = match[1].padStart(2, '0');
+            const month = months[match[2]];
+            const year = match[3];
+            if (day && month && year) return `${year}-${month}-${day}`;
+        }
+
+        // Tenta corresponder a "DD/MM/AAAA"
+        match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (match) {
+            return `${match[3]}-${match[2]}-${match[1]}`;
+        }
+
+        return dateStr;
+    }
+
+
+    // --- 2. PADRÕES REGEX (MAIS ESPECÍFICOS PRIMEIRO) ---
+
+    const valorPatterns = [
+        /Valor pago\s*R\$\s*([\d.,]+)/i, // NOVO - Para comprovantes com "Valor pago"
+        /Valor da transferência\s*R\$\s*([\d.,]+)/i,
+        /Valor.*:\s*R\$\s*([\d.,]+)/i,
+        /VALOR\s*[:\s\n]*R\$\s*([\d.,]+)/i,
+        /R\$\s+([\d.,]+)/i, 
+        /(?:\n|^)\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:\n|$)/,
+    ];
+
+    const nomePatterns = [
+        /Realizado por\s*(?:\n[A-Z]{2})?\n([A-Za-zÀ-ú\s]+)\n\*{3}/i,
+        /(?:\n|^)\s*De\s*\n([\s\S]+?)\n\s*(?:CPF|CNPJ):/i,
+        /Origem\s*\n([A-ZÀ-Ú\s]+)/i,
+        /Dados\s+de\s+quem\s+pagou\s*[\n\s]*Nome:\s*([A-Za-zÀ-ú\s]+)/i,
+        /dados da conta debitada\s*[\n\s]*nome\s+([A-Za-zÀ-ú\s]+)/i,
+        /Nome\s*do\s*Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i,
+        /Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i,
+        /De\s*[\n:]\s*([A-Za-zÀ-ú\s]+)/,
+        /\n([A-ZÀ-Ú\s]+)\nVALOR/i,
+    ];
+
+    const dataPatterns = [
+        /Data\s*da\s*Transação\s*[:\n\s]*(\d{2}\/\d{2}\/\d{4})/i,
+        /Realizada?\s*em\s*(\d{2}\/\d{2}\/\d{4})/i,
+        /(\d{1,2}\s+[A-Z]{3}\s+\d{4})/i, // NOVO - Captura "15 Set 2025"
+        /(\d{2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i,
+        /\w{3}\.,\s*(\d{1,2}\/\d{2}\/\d{4})/i,
+        /(\d{2}\/[A-Z]{3}\/\d{4})/i,
+        /(\d{2}\/\d{2}\/\d{4})/,
+    ];
+
+    // --- 3. EXTRAÇÃO E RETORNO DOS DADOS ---
+
+    const rawValor = findMatch(valorPatterns, text);
+    const rawNome = findMatch(nomePatterns, text);
+    const rawData = findMatch(dataPatterns, text);
+
+    let nomeLimpo = rawNome;
+    if (nomeLimpo) {
+        nomeLimpo = nomeLimpo.replace(/CPF$/i, '').replace(/Instituição NU PAGAMENTOS/i, '').trim();
+        
+    }
+    
+    return {
+        valor: normalizeValor(rawValor),
+        nome: nomeLimpo,
+        data: normalizeDate(rawData)
+    };
+}
+
+
+// // --- Exemplo de uso ---
+// const textoExemplo = "Juros mensal: R$100,00";
+// const juros = extrairInteiro(textoExemplo);
+// console.log(juros); // Saída: 100
 
 module.exports = { handleComprovanteMessage };

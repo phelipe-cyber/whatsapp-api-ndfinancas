@@ -37,3 +37,5 @@ rm -rf node_modules package-lock.json .wwebjs_auth .wwebjs_cache && npm cache cl
  rm -rf node_modules package-lock.json .wwebjs_auth .wwebjs_cache && npm cache clean --force && chmod -R 777 .wwebjs_auth .wwebjs_cache && npm install
 
  sudo chmod -R 777 .wwebjs_auth
+
+ npm update whatsapp-web.js

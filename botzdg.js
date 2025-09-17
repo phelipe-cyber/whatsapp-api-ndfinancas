@@ -165,7 +165,8 @@ const createClient = (id) => {
         console.log(`Conteúdo: "${messageBody}"`);
 
         const clientInstance = clients.get(id);
-        if (clientInstance.botState !== 'active' || (await msg.getChat()).isGroup) return;
+        // if (clientInstance.botState !== 'active' || (await msg.getChat()).isGroup) return;
+        if (clientInstance.botState !== 'active') return;
 
         const userId = msg.from;
         const nomeContato = msg._data.notifyName;
@@ -249,6 +250,13 @@ const createClient = (id) => {
                 console.log('4. Sessão criada/atualizada. Finalizando processamento para esta mensagem.');
                 return;
             }
+            if (isNewConversation && messageBody.toLowerCase() == '!comprovante') {
+                console.log('3. LÓGICA: !comprovante Entrou no bloco de NOVA CONVERSA.');
+                userSessions.set(userId, { lastMessageTimestamp: now, state: 'menu' });
+                await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
+                console.log('4. Sessão criada/atualizada. !comprovante Finalizando processamento para esta mensagem.');
+                return;
+            }
            
             if (session) {
                 console.log('5. LÓGICA: Entrou no bloco de CONVERSA ATIVA.');
@@ -272,7 +280,7 @@ const createClient = (id) => {
                 await client.sendMessage(userId, textMenu);
                 const foto = MessageMedia.fromFilePath('./images/selfdocumento.jpeg');
                 client.sendMessage(userId, foto)
-            } else if (session && messageBody === '2') {
+            } else if (session && messageBody === '2' || messageBody.toLowerCase() === '!comprovante') {
                 await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
             } else if (session && messageBody === '3' || messageBody.toLowerCase() === '!finalizar') {
                 userSessions.delete(userId);

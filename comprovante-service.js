@@ -31,9 +31,11 @@ function formatDateTime(date) {
  * @param {string} dt_pgto A data do pagamento no formato 'YYYY-MM-DD'.
  * @returns {Promise<object>} Um objeto indicando sucesso ou falha.
  */
-async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_diaria, juros_mensal, valor_pago) {
+async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_diaria, juros_mensal, valor_pago, comprovanteNome,abatimento,quitacao,parcela,obs) {
     let connection;
     try {
+        console.log('salvarComprovante Juros_mensal:', juros_mensal);
+
         // --- 1. Gerar o nome do arquivo e o timestamp ---
         const dataComprovante = new Date();
         const dataComprovanteFormatada = formatDateTime(dataComprovante);
@@ -59,35 +61,26 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
         console.log("Inserindo registro no banco de dados...");
         connection = await pool.getConnection();
         const sql = `
-            INSERT INTO comprovantes_teste
-            (id_solicitacao, comprovante, usuario, dt_pgto, data_comprovante)
-            VALUES(?, ?, ?, ?, ?)
+            INSERT INTO comprovantes
+            (id_solicitacao, comprovante, comprovante_nome, usuario, dt_pgto, data_comprovante,valor_total,juros_mensal,juros_diaria,abatimento,quitacao,parcela,obs)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        const values = [id_solicitacao, nomeComprovante, "system", dt_pgto, dataComprovanteFormatada];
+        const values = [id_solicitacao,
+                        nomeComprovante,
+                         comprovanteNome, 
+                         1,
+                        dt_pgto,
+                        dataComprovanteFormatada,
+                        valor_pago || null,
+                        juros_mensal || null,
+                        juros_diaria || null,
+                        abatimento || null,
+                        quitacao || null,
+                        parcela || null,
+                        obs || null];
 
         await connection.execute(sql, values);
         console.log("Registro inserido no banco de dados com sucesso.");
-
-        // Segunda inserção: valor_pago
-        const sql_insert_valor_pago = `
-            INSERT INTO valor_pago_teste
-            (id_solicitacao, valor_pago, atraso_diaria, atraso_parcela, total_atraso, em_aberto, usuario, data_valor_pago)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        `; // CORRIGIDO: 8 placeholders
-
-        // Garante que os valores são 'null' em vez de 'undefined'
-        const values_valo_pago = [
-            id_solicitacao,
-            valor_pago || "00.00",
-            juros_diaria || "00.00",
-            juros_mensal || "00.00",
-            "0.00", // total_atraso
-            "0.00", // em_aberto
-            'system',
-            dataComprovanteFormatada
-        ];
-        await connection.execute(sql_insert_valor_pago, values_valo_pago);
-        console.log("Registro de valor_pago inserido.");
 
         await connection.commit(); // Confirma a transação
         console.log("Transação confirmada com sucesso.");
