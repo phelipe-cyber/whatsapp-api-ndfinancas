@@ -128,7 +128,7 @@ function broadcastStateUpdate(id) {
 const puppeteer = require("puppeteer");
 
 const createClient = (id) => {
-    console.log(`[${id}] Preparando cliente...`);
+    // console.log(`[${id}] Preparando cliente...`);
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
         puppeteer: { headless: true, 
@@ -162,7 +162,7 @@ const createClient = (id) => {
 
         const messageBody = msg.body.trim();
         // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
-        console.log(`Conteúdo: "${messageBody}"`);
+        // console.log(`Conteúdo: "${messageBody}"`);
 
         const clientInstance = clients.get(id);
         // if (clientInstance.botState !== 'active' || (await msg.getChat()).isGroup) return;
@@ -177,13 +177,13 @@ const createClient = (id) => {
 
         // --- LÓGICA DE MENU (se não for parte do fluxo de comprovante) ---
         const session = userSessions.get(userId);
-        console.log('1. Sessão encontrada no início:', session);
+        console.info('1. Sessão encontrada no início:', session);
         const isNewConversation = !session || (now - session.lastMessageTimestamp > SESSION_TIMEOUT_MS);
-        console.log('2. O resultado de "isNewConversation" é:', isNewConversation);
+        console.info('2. O resultado de "isNewConversation" é:', isNewConversation);
 
         // ===== CORREÇÃO: LÓGICA DE BLOQUEIO PARA EVITAR MENSAGENS DUPLAS =====
         if (session && session.isProcessing) {
-            console.log(`[BLOQUEIO] Mensagem de ${userId} ignorada por processamento rápido.`);
+            // console.log(`[BLOQUEIO] Mensagem de ${userId} ignorada por processamento rápido.`);
             return;
         }
         if (session) {
@@ -243,26 +243,26 @@ const createClient = (id) => {
             }
 
             if (isNewConversation && messageBody.toLowerCase() == '!ping') {
-                console.log('3. LÓGICA: Entrou no bloco de NOVA CONVERSA.');
+                // console.log('3. LÓGICA: Entrou no bloco de NOVA CONVERSA.');
                 const textMenu = `Olá *${nomeContato}*! 👋\n\nBem-vindo ao nosso atendimento.\n\n*Responda com o número da opção desejada:*\n\n*1* - Saber mais sobre o empréstimo\n*2* - Enviar Comprovante\n*3* - Finalizar Conversa\n*4* - Solicitar Empréstimo`;
                 await client.sendMessage(userId, textMenu);
                 userSessions.set(userId, { lastMessageTimestamp: now, state: 'menu' });
-                console.log('4. Sessão criada/atualizada. Finalizando processamento para esta mensagem.');
+                // console.log('4. Sessão criada/atualizada. Finalizando processamento para esta mensagem.');
                 return;
             }
             if (isNewConversation && messageBody.toLowerCase() == '!comprovante') {
-                console.log('3. LÓGICA: !comprovante Entrou no bloco de NOVA CONVERSA.');
+                // console.log('3. LÓGICA: !comprovante Entrou no bloco de NOVA CONVERSA.');
                 userSessions.set(userId, { lastMessageTimestamp: now, state: 'menu' });
                 await msg.reply(`Ok, *${nomeContato}*! 👍\n\nPara começar, basta me enviar a imagem ou PDF do comprovante.`);
-                console.log('4. Sessão criada/atualizada. !comprovante Finalizando processamento para esta mensagem.');
+                // console.log('4. Sessão criada/atualizada. !comprovante Finalizando processamento para esta mensagem.');
                 return;
             }
            
             if (session) {
-                console.log('5. LÓGICA: Entrou no bloco de CONVERSA ATIVA.');
+                // console.log('5. LÓGICA: Entrou no bloco de CONVERSA ATIVA.');
                 session.lastMessageTimestamp = now;
                 userSessions.set(userId, session);
-                console.log('6. Timestamp atualizado com sucesso.');
+                // console.log('6. Timestamp atualizado com sucesso.');
 
             }
 
@@ -327,7 +327,7 @@ const createClient = (id) => {
 clientIds.forEach(id => createClient(id));
 
 io.on('connection', async (socket) => {
-    console.log('Navegador conectado:', socket.id);
+    // console.log('Navegador conectado:', socket.id);
     socket.emit('client_list', clientIds);
 
     for (const [id, clientInstance] of clients.entries()) {

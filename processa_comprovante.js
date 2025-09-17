@@ -20,7 +20,7 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
         // ETAPA 1: Usuário envia a mídia primeiro
         // if (msg.hasMedia && messageBody.toLowerCase() == '!ping') {
         if (msg.hasMedia && session) {
-            console.log(`[COMPROVANTE] Mídia recebida de ${userId}. Armazenando...`);
+            // console.log(`[COMPROVANTE] Mídia recebida de ${userId}. Armazenando...`);
             const attachmentData = await msg.downloadMedia();
             if (!attachmentData) throw new Error("Falha ao baixar a mídia.");
 
@@ -40,7 +40,7 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
                 return { handled: true };
             }
 
-            console.log(`[COMPROVANTE] Dados recebidos de ${userId}. Combinando com mídia pendente.`);
+            // console.log(`[COMPROVANTE] Dados recebidos de ${userId}. Combinando com mídia pendente.`);
 
             let connection;
             try {

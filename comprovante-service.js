@@ -34,7 +34,7 @@ function formatDateTime(date) {
 async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_diaria, juros_mensal, valor_pago, comprovanteNome,abatimento,quitacao,parcela,obs) {
     let connection;
     try {
-        console.log('salvarComprovante Juros_mensal:', juros_mensal);
+        //console.log('salvarComprovante Juros_mensal:', juros_mensal);
 
         // --- 1. Gerar o nome do arquivo e o timestamp ---
         const dataComprovante = new Date();
@@ -47,7 +47,7 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
         const caminhoRemotoFTP = `/teste_comprovante/${nomeComprovante}`;
 
         // --- 2. Fazer o upload para o servidor FTP ---
-        console.log(`Iniciando upload para o FTP: ${caminhoRemotoFTP}`);
+        //console.log(`Iniciando upload para o FTP: ${caminhoRemotoFTP}`);
         const fileStream = Readable.from(uploadedFile.data);
         const ftpResult = await uploadToFTP(fileStream, caminhoRemotoFTP);
 
@@ -55,10 +55,10 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
             // Se o upload para o FTP falhar, lança um erro para interromper o processo.
             throw new Error(`Falha no upload para o FTP: ${ftpResult.error}`);
         }
-        console.log("Upload para o FTP concluído com sucesso.");
+        //console.log("Upload para o FTP concluído com sucesso.");
 
         // --- 3. Inserir o registro no banco de dados ---
-        console.log("Inserindo registro no banco de dados...");
+        //console.log("Inserindo registro no banco de dados...");
         connection = await pool.getConnection();
         const sql = `
             INSERT INTO comprovantes
@@ -80,10 +80,10 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
                         obs || null];
 
         await connection.execute(sql, values);
-        console.log("Registro inserido no banco de dados com sucesso.");
+        //console.log("Registro inserido no banco de dados com sucesso.");
 
         await connection.commit(); // Confirma a transação
-        console.log("Transação confirmada com sucesso.");
+        //console.log("Transação confirmada com sucesso.");
 
         return { success: true, filename: nomeComprovante };
 
@@ -92,7 +92,7 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
         // TODO: Implementar lógica de rollback (ex: deletar arquivo do FTP se o DB falhar)
         if (connection) {
             await connection.rollback(); // Desfaz a transação em caso de erro
-            console.log("Transação desfeita (rollback).");
+            //console.log("Transação desfeita (rollback).");
         }
         return { success: false, error: error.message };
     } finally {

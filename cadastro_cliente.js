@@ -163,13 +163,13 @@ async function handleCadastroMessage({ msg, session, userSessions, registrationS
 
 // Função para salvar os dados coletados no banco de dados
 async function salvarCadastroCliente(userId, collectedData) {
-    console.log(`Salvando cadastro para o usuário: ${userId}`);
+    // console.log(`Salvando cadastro para o usuário: ${userId}`);
     
     const address = collectedData.partialAddress;
     const fullAddress = `${address.logradouro}, ${collectedData.numeroCasa}, ${collectedData.complemento} - ${address.bairro}, ${address.localidade} - ${address.uf}, CEP: ${collectedData.cep}`;
     
     collectedData.enderecoCompleto = fullAddress;
-    console.log('Dados finais a serem salvos:', collectedData);
+    // console.log('Dados finais a serem salvos:', collectedData);
     
     // Aqui você implementa a lógica para salvar no banco de dados e fazer upload dos arquivos
     
