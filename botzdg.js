@@ -177,9 +177,9 @@ const createClient = (id) => {
 
         // --- LÓGICA DE MENU (se não for parte do fluxo de comprovante) ---
         const session = userSessions.get(userId);
-        console.info('1. Sessão encontrada no início:', session);
+        // console.info('1. Sessão encontrada no início:', session);
         const isNewConversation = !session || (now - session.lastMessageTimestamp > SESSION_TIMEOUT_MS);
-        console.info('2. O resultado de "isNewConversation" é:', isNewConversation);
+        // console.info('2. O resultado de "isNewConversation" é:', isNewConversation);
 
         // ===== CORREÇÃO: LÓGICA DE BLOQUEIO PARA EVITAR MENSAGENS DUPLAS =====
         if (session && session.isProcessing) {
