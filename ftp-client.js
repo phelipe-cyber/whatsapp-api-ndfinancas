@@ -18,7 +18,7 @@ async function uploadToFTP(fileStream, remoteFileName) {
         // A biblioteca agora recebe o stream, como esperado
         await client.uploadFrom(fileStream, remoteFileName); 
 
-        console.log(`Arquivo ${remoteFileName} enviado com sucesso para o FTP.`);
+        // console.log(`Arquivo ${remoteFileName} enviado com sucesso para o FTP.`);
         return { success: true, filename: remoteFileName };
 
     } catch (err) {

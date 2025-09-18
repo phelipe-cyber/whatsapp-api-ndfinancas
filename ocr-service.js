@@ -7,13 +7,13 @@ const { createWorker } = require('tesseract.js');
  * @returns {Promise<string>} O texto extraído da imagem.
  */
 async function readTextFromImage(imageBuffer) {
-    console.log('Iniciando o processo de OCR...');
+    // console.log('Iniciando o processo de OCR...');
     const worker = await createWorker('por'); // 'por' para o idioma português
 
     try {
         // 1. Reconhece o texto na imagem
         const { data: { text } } = await worker.recognize(imageBuffer);
-        console.log('Texto extraído com sucesso.');
+        // console.log('Texto extraído com sucesso.');
         return text;
     } catch (error) {
         console.error("Erro durante o reconhecimento de texto (OCR):", error);
@@ -21,7 +21,7 @@ async function readTextFromImage(imageBuffer) {
     } finally {
         // 2. É MUITO IMPORTANTE terminar o worker para libertar a memória.
         await worker.terminate();
-        console.log('Worker do OCR finalizado.');
+        // console.log('Worker do OCR finalizado.');
     }
 }
 
