@@ -9,6 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 const pool = require('./db');
 const { salvarComprovante } = require('./comprovante-service');
 const { readTextFromImage } = require('./ocr-service');
+const { isNull } = require('util');
 
 // Esta função é chamada quando o bot recebe uma mensagem que pode ser parte do fluxo de comprovante.
 async function handleComprovanteMessage({ msg, session, userSessions, pendingMedia }) {
@@ -81,12 +82,20 @@ async function handleComprovanteMessage({ msg, session, userSessions, pendingMed
                     return msg.reply(`❌ Olá *${nomeContato}*! \nTipo de arquivo não suportado. Envie uma imagem ou PDF.`);
                 }
 
-                if (!textoExtraido) {
+                if (!textoExtraido || textoExtraido.trim() === '' ) {
                     return msg.reply(`❌ Olá *${nomeContato}*! \nNão consegui extrair texto do arquivo. Tente um com melhor qualidade.`);
                 }
 
-                // console.log(`TextoExtraido: "${textoExtraido}"`);
+                console.debug(`TextoExtraido: "${textoExtraido}"`);
                 const dadosComprovante = parseComprovanteText(textoExtraido);
+
+                const dadosFormatados = JSON.stringify(dadosComprovante, null, 2);
+                console.debug("dadosComprovante:", dadosComprovante);
+
+                // if (dadosComprovante.valor === null|| dadosComprovante.data === null) {
+                //     return msg.reply(`❌ Olá *${nomeContato}*! \nNão consegui extrair texto do arquivo. Tente um com melhor qualidade.`);
+                // }
+
                 let resposta = `✅ Olá *${nomeContato}*! \nDados extraídos do comprovante:\n\n👤 *Nome:* ${dadosComprovante.nome || 'Não encontrado'}\n💰 *Valor:* R$ ${dadosComprovante.valor || 'Não encontrado'}\n📅 *Data:* ${dadosComprovante.data || 'Não encontrada'}`;
                 await msg.reply(resposta);
 
@@ -232,19 +241,19 @@ function parseMessageData(textBody) {
 
 
 /**
- * Analisa o texto extraído de um comprovante de transferência para extrair valor, nome do pagador e data.
- * @param {string} text O texto bruto extraído do comprovante via OCR.
+ * Analisa o texto extraído de um comprovante para extrair valor, nome do pagador e data.
+ * @param {string} text O texto bruto extraído do comprovante.
  * @returns {{valor: number|null, nome: string|null, data: string|null}} Um objeto com os dados extraídos e normalizados.
  */
 function parseComprovanteText(text) {
 
-    // --- 1. FUNÇÕES AUXILIARES DE NORMALIZAÇÃO ---
+    // --- 1. FUNÇÕES AUXILIARES ---
 
     function findMatch(patterns, textToSearch) {
         for (const pattern of patterns) {
             const match = textToSearch.match(pattern);
             if (match && match[1]) {
-                return match[1].replace(/(\r\n|\n|\r)/gm, " ").trim();
+                return match[1].trim();
             }
         }
         return null;
@@ -252,102 +261,136 @@ function parseComprovanteText(text) {
 
     function normalizeValor(valorStr) {
         if (!valorStr) return null;
-        const cleanedStr = valorStr
-            .replace(/\./g, '')
-            .replace(',', '.');
+        const cleanedStr = valorStr.replace(/\./g, '').replace(',', '.');
         return parseFloat(cleanedStr);
     }
 
     function normalizeDate(dateStr) {
         if (!dateStr) return null;
-
+    
+        let cleanedDateStr = dateStr.toUpperCase();
+    
+        // **LÓGICA ESSENCIAL PARA CORREÇÃO DE OCR**
+        // Separa a data em partes (ex: "O6", "OUT", "2025")
+        const parts = cleanedDateStr.split(' ');
+        if (parts.length >= 3) {
+            // Corrige apenas a primeira parte (o dia), trocando O por 0 e S por 5
+            parts[0] = parts[0].replace(/O/g, '0').replace(/S/g, '5');
+            // Remonta a string de data, agora corrigida. Ex: "06 OUT 2025"
+            cleanedDateStr = parts.join(' ');
+        }
+    
         const months = {
-            'janeiro': '01', 'fevereiro': '02', 'março': '03', 'abril': '04', 'maio': '05', 'junho': '06',
-            'julho': '07', 'agosto': '08', 'setembro': '09', 'outubro': '10', 'novembro': '11', 'dezembro': '12',
-            'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
-            'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
+            'JANEIRO': '01', 'FEVEREIRO': '02', 'MARÇO': '03', 'ABRIL': '04', 'MAIO': '05', 'JUNHO': '06',
+            'JULHO': '07', 'AGOSTO': '08', 'SETEMBRO': '09', 'OUTUBRO': '10', 'NOVEMBRO': '11', 'DEZEMBRO': '12',
+            'JAN': '01', 'FEV': '02', 'MAR': '03', 'ABR': '04', 'MAI': '05', 'JUN': '06',
+            'JUL': '07', 'AGO': '08', 'SET': '09', 'OUT': '10', 'NOV': '11', 'DEZ': '12'
         };
-
-        // Tenta corresponder a "DD de [Mês] de AAAA"
-        let match = dateStr.toLowerCase().match(/(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
+    
+        // Tenta corresponder a "DD de [Mês por extenso] de AAAA" (Mercado Pago)
+        let match = cleanedDateStr.toLowerCase().match(/(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
         if (match) {
             const day = match[1].padStart(2, '0');
+            const month = months[match[2]];
+            const year = match[3];
+            if (day && month && year) return `${year}-${month}-${day}`;
+        }
+    
+        // Tenta corresponder a "DD MMM AAAA" (Nubank, Pan)
+        match = cleanedDateStr.match(/(\d{2})\s+([A-Z]{3})\s+(\d{4})/);
+        if (match) {
+            const day = match[1];
+            const month = months[match[2]];
+            const year = match[3];
+            if (day && month && year) return `${year}-${month}-${day}`;
+        }
+    
+        // Tenta corresponder a "DD/MMM/AAAA" (PicPay)
+        match = cleanedDateStr.match(/(\d{2})\/([A-Z]{3})\/(\d{4})/);
+        if (match) {
+            const day = match[1];
             const month = months[match[2]];
             const year = match[3];
             if (day && month && year) return `${year}-${month}-${day}`;
         }
         
-        // NOVO: Tenta corresponder a "DD MMM AAAA" (ex: 15 Set 2025)
-        match = dateStr.toLowerCase().match(/(\d{1,2})\s+([a-z]{3})\s+(\d{4})/);
-        if (match) {
-            const day = match[1].padStart(2, '0');
-            const month = months[match[2]];
-            const year = match[3];
-            if (day && month && year) return `${year}-${month}-${day}`;
-        }
-
-        // Tenta corresponder a "DD/MMM/AAAA" (ex: 11/SET/2025)
-        match = dateStr.toLowerCase().match(/(\d{1,2})\/([a-z]{3})\/(\d{4})/);
-        if (match) {
-            const day = match[1].padStart(2, '0');
-            const month = months[match[2]];
-            const year = match[3];
-            if (day && month && year) return `${year}-${month}-${day}`;
-        }
-
-        // Tenta corresponder a "DD/MM/AAAA"
-        match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        // Tenta corresponder a "DD/MM/AAAA" (Genérico)
+        match = cleanedDateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
         if (match) {
             return `${match[3]}-${match[2]}-${match[1]}`;
         }
-
-        return dateStr;
+    
+        return null;
     }
 
-
-    // --- 2. PADRÕES REGEX (MAIS ESPECÍFICOS PRIMEIRO) ---
+    // --- 2. PADRÕES REGEX ---
 
     const valorPatterns = [
-        /Valor pago\s*R\$\s*([\d.,]+)/i, // NOVO - Para comprovantes com "Valor pago"
-        /Valor da transferência\s*R\$\s*([\d.,]+)/i,
-        /Valor.*:\s*R\$\s*([\d.,]+)/i,
-        /VALOR\s*[:\s\n]*R\$\s*([\d.,]+)/i,
-        /R\$\s+([\d.,]+)/i, 
-        /(?:\n|^)\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:\n|$)/,
+        /Pix enviado\s*R\$\s*([\d.,]+)/i, 
+        /Valor pago\s*R\$\s*([\d.,]+)/i,
+        /R\$\s*([\d.,]+)/i,
+        /Valor\s+R\$\s*([\d.,]+)/i,            // Nubank
+        /Pix enviado\s*R\$\s*([\d.,]+)/i,       // Inter
+        /Valor pago\s*R\$\s*([\d.,]+)/i,        // Pan
+        /Valor da transferência\s*R\$\s*([\d.,]+)/i, // BV
+        /Valor\s+Data\s+R\$\s+([\d.,]+)/i,     // Caixa (PDF Texto)
+        /VALOR\s*[:\s\n]*R\$\s*([\d.,]+)/i,      // Genérico
+        /R\$\s*([\d.,]+)/i,                    // Mais Genérico (Mercado Pago)
     ];
 
     const nomePatterns = [
-        /Realizado por\s*(?:\n[A-Z]{2})?\n([A-Za-zÀ-ú\s]+)\n\*{3}/i,
-        /(?:\n|^)\s*De\s*\n([\s\S]+?)\n\s*(?:CPF|CNPJ):/i,
-        /Origem\s*\n([A-ZÀ-Ú\s]+)/i,
-        /Dados\s+de\s+quem\s+pagou\s*[\n\s]*Nome:\s*([A-Za-zÀ-ú\s]+)/i,
-        /dados da conta debitada\s*[\n\s]*nome\s+([A-Za-zÀ-ú\s]+)/i,
-        /Nome\s*do\s*Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i,
-        /Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i,
-        /De\s*[\n:]\s*([A-Za-zÀ-ú\s]+)/,
-        /\n([A-ZÀ-Ú\s]+)\nVALOR/i,
+        /Dados do pagador\s+De\s+([\s\S]+?)\s+CPF/i,
+        /Quem pagou\s+Nome\s+([\s\S]+?)\s+CPF\/CNPJ/i,
+        // ... seus outros padrões
+        /QUEM TRANSFERIU\s+Nome\s+([\s\S]+?)\s+CPF\/CNPJ/i,
+        /Dados\s+do\s+pagad[oe]r\s+Nome\s+([\s\S]+?)\s+CPF/i,
+        /\*\s+De\s+([\s\S]+?)\s+CPF/i,
+        /Origem[\s\S]*?Nome\s+([\s\S]+?)\s+Instituição/i,
+        /Quem pagou[\s\S]*?Nome\s+([A-ZÀ-Ú\s]+)/i,
+        /Realizado por[\s\S]*?\n([A-ZÀ-Ú\s]+)\n\*{3}/i,
+        /QUEM TRANSFERIU\s+Nome\s+([\s\S]+?)\s+CPF\/CNPJ/i,
+        /Dados\s+do\s+pagad[oe]r\s+Nome\s+([\s\S]+?)\s+CPF/i,
+        /\*\s+De\s+([\s\S]+?)\s+CPF/i,                                  // Mercado Pago
+        /Dados\s+do\s+pagador\s+Nome\s+([\s\S]+?)\s+CPF/i,             // Caixa / Sicredi
+        /Origem[\s\S]*?Nome\s+([\s\S]+?)\s+Instituição/i,               // Nubank
+        /Quem pagou[\s\S]*?Nome\s+([A-ZÀ-Ú\s]+)/i,                      // Inter
+        /Realizado por\s*(?:\n[A-Z]{2})?\n([A-Za-zÀ-ú\s]+)\n\*{3}/i,     // Pan (com iniciais)
+        /De\s+([\s\S]+?)\n\*{3}/i,                                     // PicPay (De... ***)
+        /(?:\n|^)\s*De\s*\n([\s\S]+?)\n\s*(?:CPF|CNPJ):/i,             // Padrão genérico
+        /Pagador\s*[:\n]\s*([A-Za-zÀ-ú\s]+)/i,                         // Padrão genérico
     ];
 
     const dataPatterns = [
-        /Data\s*da\s*Transação\s*[:\n\s]*(\d{2}\/\d{2}\/\d{4})/i,
-        /Realizada?\s*em\s*(\d{2}\/\d{2}\/\d{4})/i,
-        /(\d{1,2}\s+[A-Z]{3}\s+\d{4})/i, // NOVO - Captura "15 Set 2025"
-        /(\d{2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i,
-        /\w{3}\.,\s*(\d{1,2}\/\d{2}\/\d{4})/i,
-        /(\d{2}\/[A-Z]{3}\/\d{4})/i,
+        // **PADRÃO FINAL E MAIS ROBUSTO PARA O BANCO INTER**
+        /Data do pagamento[\s\S]*?(\d{2}\/\d{2}\/\d{4})/i,
+        
+        // Seus outros padrões de fallback
+        /(\d{1,2}\s+de\s+[a-z]+\s+de\s+\d{4})/i,
+        /(\d{2}\/[a-z]{3}\/\d{4})/i,
         /(\d{2}\/\d{2}\/\d{4})/,
+
+        /(\d{1,2}\s+[A-Z]{3}\s+\d{4})/i,
+        /([A-Z0-9]{2}\s+[A-Z]{3}\s+\d{4})/i,                          // Nubank (com erro OCR "OS SET" ou "O6 OUT")
+        /Data\/Hora\s+(\d{2}\/\d{2}\/\d{4})/i,                        // Caixa (PDF Texto)
+        /Realizada em\s+(\d{2}\/\d{2}\/\d{4})/i,                      // Sicredi
+        /(\d{2}\/\d{2}\/\d{4})/,                                      // Genérico (deve ser o último
+
     ];
 
-    // --- 3. EXTRAÇÃO E RETORNO DOS DADOS ---
+    // --- 3. EXTRAÇÃO E DEPURAÇÃO ---
 
     const rawValor = findMatch(valorPatterns, text);
     const rawNome = findMatch(nomePatterns, text);
     const rawData = findMatch(dataPatterns, text);
 
+    // **FERRAMENTA DE DEPURAÇÃO CRUCIAL**
+    // Esta linha mostrará no seu terminal exatamente o que o Regex da data capturou.
+    console.log("DEBUG: String de data capturada (rawData):", rawData);
+
+    // Limpeza final do nome
     let nomeLimpo = rawNome;
     if (nomeLimpo) {
-        nomeLimpo = nomeLimpo.replace(/CPF$/i, '').replace(/Instituição NU PAGAMENTOS/i, '').trim();
-        
+        nomeLimpo = nomeLimpo.replace(/\s+/g, ' ').trim();
     }
     
     return {
@@ -356,7 +399,6 @@ function parseComprovanteText(text) {
         data: normalizeDate(rawData)
     };
 }
-
 
 // // --- Exemplo de uso ---
 // const textoExemplo = "Juros mensal: R$100,00";

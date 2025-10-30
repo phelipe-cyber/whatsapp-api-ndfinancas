@@ -34,6 +34,25 @@ const userSessions = new Map(); // Gerenciador de estado da conversa
 const pendingMedia = new Map(); // NOVO: Mapa para guardar mídias pendentes
 const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 horas
 
+// --- FUNÇÃO PARA LOGAR MEMÓRIA ---
+function logMemoryUsage() {
+    // Pega o uso de memória do processo Node.js
+    const usage = process.memoryUsage();
+    
+    // Formata os bytes para Megabytes (MB) para facilitar a leitura
+    const formatMemory = (bytes) => (bytes / 1024 / 1024).toFixed(2) + ' MB';
+
+    const memoryInfo = {
+        rss: formatMemory(usage.rss), // Resident Set Size: Memória total alocada para o processo
+        heapTotal: formatMemory(usage.heapTotal), // Memória total disponível para objetos JS
+        heapUsed: formatMemory(usage.heapUsed), // Memória de fato usada por objetos JS
+        external: formatMemory(usage.external) // Memória usada por buffers C++ (ex: buffers de imagem)
+    };
+
+    // Exibe no console
+    console.log(`[MemoryLog] ${new Date().toISOString()} | RSS: ${memoryInfo.rss} | Heap Usado: ${memoryInfo.heapUsed} / ${memoryInfo.heapTotal} | Externo: ${memoryInfo.external}`);
+}
+
 // =========================================================
 // ===== FLUXO DE CADASTRO =====
 // =========================================================
@@ -107,9 +126,6 @@ app.post('/send-message', [
     }
 });
 
-
-
-
 // =========================================================
 // ===== LÓGICA DO WHATSAPP E SOCKET.IO =====
 // =========================================================
@@ -125,22 +141,34 @@ function broadcastStateUpdate(id) {
     }
 }
 
-const puppeteer = require("puppeteer");
+// const puppeteer = require("puppeteer-core");
 
 const createClient = (id) => {
     // console.log(`[${id}] Preparando cliente...`);
     const client = new Client({
         authStrategy: new LocalAuth({ clientId: id }),
-        puppeteer: { headless: true, 
+        puppeteer: { 
+            headless: "new", // <-- MUDANÇA PRINCIPAL
             args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox'
-            ] }
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-gpu', // Desabilita a GPU (desnecessária no servidor)
+                '--disable-dev-shm-usage', // Resolve problemas de memória compartilhada
+                '--disable-extensions', // Desabilita extensões
+                '--no-zygote', // Ajuda a reduzir o footprint
+                '--single-process', // Pode reduzir o uso de RAM (teste a estabilidade)
+                '--autoplay-policy=no-user-gesture-required'
+            ] 
+        }
     });
 
     client.botState = 'inactive';
     client.connectionStatus = 'Offline';
     clients.set(id, client);
+
+    // ADICIONE AQUI para ver a memória logo após criar o cliente
+    console.log(`[MemoryLog] Cliente '${id}' criado.`);
+    logMemoryUsage();
 
     client.on('qr', (qr) => {
         client.connectionStatus = 'Aguardando QR Code';
@@ -173,7 +201,7 @@ const createClient = (id) => {
         const now = Date.now();
         // const messageBody = msg.body.trim();
         // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
-        // console.log(`Conteúdo: "${messageBody}"`);
+        console.log(`Conteúdo: "${messageBody}"`);
 
         // --- LÓGICA DE MENU (se não for parte do fluxo de comprovante) ---
         const session = userSessions.get(userId);
@@ -371,6 +399,12 @@ io.on('connection', async (socket) => {
         }
     });
 });
+// =========================================================
+// ===== LOG DE MEMÓRIA (PARA TESTES) =====
+// =========================================================
+// Loga o uso de memória a cada 1 minuto (60000 ms)
+setInterval(logMemoryUsage, 10000);
+// Você pode diminuir o tempo (ex: 10000 para 10s) para testes mais rápidos
 
 // =========================================================
 // ===== INICIALIZAÇÃO DO SERVIDOR =====

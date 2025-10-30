@@ -80,6 +80,20 @@ async function salvarComprovante(id_solicitacao, uploadedFile, dt_pgto, juros_di
                         obs || null];
 
         await connection.execute(sql, values);
+
+        // const sqlUpdate = `
+        //     UPDATE valor_pago
+        //     SET valor_pago = ?
+        //     WHERE id_solicitacao = ?;
+        // `;
+        
+        // const valuesUpdate = [
+        //     valor_pago || null,  // primeiro o valor a atualizar
+        //     id_solicitacao       // depois o id da linha que será atualizada
+        // ];
+        
+        // await connection.execute(sqlUpdate, valuesUpdate);
+    
         //console.log("Registro inserido no banco de dados com sucesso.");
 
         await connection.commit(); // Confirma a transação
