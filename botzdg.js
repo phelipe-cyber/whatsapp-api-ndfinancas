@@ -9,6 +9,7 @@ const socketIO = require('socket.io');
 const qrcode = require('qrcode');
 const path = require('path');
 const axios = require('axios');
+const pidUsage = require('pidusage');
 
 // --- SUAS DEPENDÊNCIAS DE SERVIÇO ---
 
@@ -28,29 +29,66 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/", express.static(path.join(__dirname, "/")));
 
 // --- VARIÁVEIS GLOBAIS DOS BOTS ---
-const clientIds = ['BOT-ADM', 'BOT-COMPROVANTE'];
+const clientIds = ['BOT-ADM'];
 const clients = new Map();
 const userSessions = new Map(); // Gerenciador de estado da conversa
 const pendingMedia = new Map(); // NOVO: Mapa para guardar mídias pendentes
 const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 horas
 
-// --- FUNÇÃO PARA LOGAR MEMÓRIA ---
-function logMemoryUsage() {
-    // Pega o uso de memória do processo Node.js
-    const usage = process.memoryUsage();
-    
-    // Formata os bytes para Megabytes (MB) para facilitar a leitura
-    const formatMemory = (bytes) => (bytes / 1024 / 1024).toFixed(2) + ' MB';
+// --- FUNÇÃO PARA LOGAR MEMÓRIA (VERSÃO COMPLETA) ---
 
-    const memoryInfo = {
-        rss: formatMemory(usage.rss), // Resident Set Size: Memória total alocada para o processo
-        heapTotal: formatMemory(usage.heapTotal), // Memória total disponível para objetos JS
-        heapUsed: formatMemory(usage.heapUsed), // Memória de fato usada por objetos JS
-        external: formatMemory(usage.external) // Memória usada por buffers C++ (ex: buffers de imagem)
-    };
+function formatMemory(bytes) {
+    if (bytes === 0) return '0 B';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
 
-    // Exibe no console
-    console.log(`[MemoryLog] ${new Date().toISOString()} | RSS: ${memoryInfo.rss} | Heap Usado: ${memoryInfo.heapUsed} / ${memoryInfo.heapTotal} | Externo: ${memoryInfo.external}`);
+async function logMemoryUsage() { // <-- Função agora é 'async'
+    try {
+        // 1. Memória do Node.js (como antes)
+        const nodeUsage = process.memoryUsage();
+        const nodeRssBytes = nodeUsage.rss;
+        const nodeRssMB = formatMemory(nodeRssBytes);
+
+        let totalChromeBytes = 0;
+        const chromeLogs = []; // Array para logs individuais de cada bot
+
+        // 2. Iterar sobre todos os clientes (bots)
+        for (const [id, client] of clients.entries()) {
+            if (client.chromePid) { // Verifica se o PID já foi salvo
+                try {
+                    const stats = await pidUsage(client.chromePid);
+                    const chromeMemoryBytes = stats.memory; // 'memory' está em bytes
+                    totalChromeBytes += chromeMemoryBytes;
+                    chromeLogs.push(`${id}: ${formatMemory(chromeMemoryBytes)}`);
+                } catch (e) {
+                    // O processo pode ter morrido ou o PID é inválido
+                    chromeLogs.push(`${id}: (PID ${client.chromePid} não encontrado)`);
+                    client.chromePid = null; // Reseta se o PID não for mais válido
+                }
+            } else if (client.connectionStatus === 'Conectado' && !client.chromePid) {
+                // Bot está conectado mas ainda não pegamos o PID (raro, mas pode acontecer)
+                chromeLogs.push(`${id}: (Aguardando PID)`);
+            }
+        }
+
+        // 3. Calcular e exibir o total
+        const totalMemoryBytes = nodeRssBytes + totalChromeBytes;
+        const totalChromeMB = formatMemory(totalChromeBytes);
+        const totalMemoryMB = formatMemory(totalMemoryBytes);
+
+        const chromeLogString = chromeLogs.length > 0 ? `[ ${chromeLogs.join(' | ')} ]` : '[Nenhum bot com PID]';
+        
+        // Formato de log mais limpo
+        console.log(`\n[MemoryLog] --- ${new Date().toISOString()} ---`);
+        console.log(`  > Node.js (Script): ${nodeRssMB}`);
+        console.log(`  > Chrome (Bots):    ${totalChromeMB} ${chromeLogString}`);
+        console.log(`  > TOTAL GERAL (Est.): ${totalMemoryMB}`);
+        console.log(`  > (Detalhes Node Heap: ${formatMemory(nodeUsage.heapUsed)} / ${formatMemory(nodeUsage.heapTotal)})`);
+        console.log(`---------------------------------------------------\n`);
+
+    } catch (error) {
+        console.error('[MemoryLog] Erro crítico ao buscar uso de memória:', error);
+    }
 }
 
 // =========================================================
@@ -165,9 +203,6 @@ const createClient = (id) => {
     client.botState = 'inactive';
     client.connectionStatus = 'Offline';
     clients.set(id, client);
-
-    // ADICIONE AQUI para ver a memória logo após criar o cliente
-    console.log(`[MemoryLog] Cliente '${id}' criado.`);
     logMemoryUsage();
 
     client.on('qr', (qr) => {
@@ -182,6 +217,17 @@ const createClient = (id) => {
     client.on('ready', () => {
         client.connectionStatus = 'Conectado';
         client.botState = 'active';
+
+        // --- ADICIONE ESTAS LINHAS ---
+        if (client.pupBrowser) {
+            const browserProcess = client.pupBrowser.process();
+            if (browserProcess) {
+                client.chromePid = browserProcess.pid; // Salva o PID no objeto do cliente
+                console.log(`[MemoryLog] Cliente '${id}' CONECTADO. Chrome PID: ${client.chromePid}`);
+            }
+        }
+        // --- FIM DA ADIÇÃO ---
+
         broadcastStateUpdate(id);
     });
 
