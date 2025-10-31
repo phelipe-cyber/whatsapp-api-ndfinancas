@@ -247,7 +247,7 @@ const createClient = (id) => {
         const now = Date.now();
         // const messageBody = msg.body.trim();
         // console.log(`\n--- Nova Mensagem de ${nomeContato} ---`);
-        console.log(`Conteúdo: "${messageBody}"`);
+        // console.log(`Conteúdo: "${messageBody}"`);
 
         // --- LÓGICA DE MENU (se não for parte do fluxo de comprovante) ---
         const session = userSessions.get(userId);
